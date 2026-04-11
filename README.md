@@ -26,7 +26,7 @@ SharpAgentHarness is a C#/.NET project that implements a minimal, general-purpos
 
 ## Architecture
 
-The harness is exposed through a REST API hosted by the `Agent` project which also hosts a basic Web UI for exercising the API endpoints.
+The harness is exposed through a REST API hosted by the `Agent` project, which also hosts a basic Web UI for exercising the API endpoints.
 
 Internally, the main elements of the agent are:
 
@@ -46,7 +46,7 @@ The harness takes an intentionally opinionated approach:
 - `Tool`s are organised into named `Toolkit`s.
 - Each `Session` selects one `Toolkit` up front, and those tools are provided to the LLM on each turn.
 - `strict` mode is always used for function tools, in line with OpenAI guidance.
-- `prompt_cache_key` usage is structured to improve the likelihood of prompt caching.
+- `prompt_cache_key` is used to improve the likelihood of prompt caching.
 - Sessions and events are persisted in memory only.
 - Streaming responses are not currently supported.
 
@@ -61,7 +61,13 @@ To run the harness locally you need:
 - .NET 9 SDK.
 - An OpenAI API key stored in the `OPENAI_API_KEY` environment variable.
 
-In Visual Studio Code, Run > Start Debugging (or F5) should start the ASP.NET application that serves both the agent's REST API and the lightweight Web UI. When running, use these local URLs:
+In Visual Studio Code, Run > Start Debugging (or F5); you may be prompted to:
+
+- Select Debugger (C#).
+- Select Launch Configuration (Default).
+- Select C# Startup Project (Agents).
+
+This should start the ASP.NET application that serves both the agent's REST API and the lightweight Web UI. When running, use these local URLs:
 
 - API health check: `http://localhost:5205/api` or `https://localhost:7000/api`
 - Web UI: `http://localhost:5205/ui.html` or `https://localhost:7000/ui.html`
