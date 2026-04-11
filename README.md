@@ -63,9 +63,9 @@ To run the harness locally you need:
 
 In Visual Studio Code, Run > Start Debugging (or F5); you may be prompted to:
 
-- Select Debugger (C#)
-- Select Launch Configuration (Default)
-- Select C# Startup Project (Agents)
+- Select Debugger (C#).
+- Select Launch Configuration (Default).
+- Select C# Startup Project (Agents).
 
 This should start the ASP.NET application that serves both the agent's REST API and the lightweight Web UI. When running, use these local URLs:
 
