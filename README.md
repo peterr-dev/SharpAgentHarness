@@ -46,7 +46,7 @@ The harness takes an intentionally opinionated approach:
 - `Tool`s are organised into named `Toolkit`s.
 - Each `Session` selects one `Toolkit` up front, and those tools are provided to the LLM on each turn.
 - `strict` mode is always used for function tools, in line with OpenAI guidance.
-- `prompt_cache_key` usage is structured to improve the likelihood of prompt caching.
+- `prompt_cache_key` is used to improve the likelihood of prompt caching.
 - Sessions and events are persisted in memory only.
 - Streaming responses are not currently supported.
 
