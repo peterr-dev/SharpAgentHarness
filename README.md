@@ -26,7 +26,7 @@ SharpAgentHarness is a C#/.NET project that implements a minimal, general-purpos
 
 ## Architecture
 
-The harness is exposed through a REST API hosted by the `Agent` project which also hosts a basic Web UI for exercising the API endpoints.
+The harness is exposed through a REST API hosted by the `Agent` project, which also hosts a basic Web UI for exercising the API endpoints.
 
 Internally, the main elements of the agent are:
 
