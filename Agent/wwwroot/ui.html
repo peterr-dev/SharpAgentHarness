@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SharpAgentHarness Test UI</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="hero">
+        <h1>SharpAgentHarness Test UI</h1>
+      </section>
+
+      <section class="grid">
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Request</h2>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="form-grid">
+              <div class="row">
+                <label for="baseUrl">Base API URL</label>
+                <input id="baseUrl" type="text" value="http://localhost:5205/api" placeholder="http://localhost:5205/api" />
+              </div>
+
+              <div class="row">
+                <label for="requestType">Request Type</label>
+                <select id="requestType">
+                  <option value="create-session">Create session</option>
+                  <option value="submit-message">Send message</option>
+                  <option value="get-session">Get session</option>
+                  <option value="get-events">Get events</option>
+                </select>
+              </div>
+
+              <div id="dynamicFields" class="form-grid"></div>
+
+              <div class="actions">
+                <button class="primary" id="sendBtn" type="button">Send request</button>
+                <button class="secondary" id="clearBtn" type="button">Clear</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <div>
+              <h2 class="panel-title">Response</h2>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="status-card">
+              <div class="status-pills">
+                <div id="statusPill" class="status-pill status-idle">Waiting for request</div>
+                <div id="cachePill" class="status-pill cache-pill cache-pill-unknown">Cache status unavailable</div>
+              </div>
+            </div>
+
+            <div class="response-block">
+              <div class="response-block-header">
+                <h3 class="response-block-title">Response Body</h3>
+                <button class="copy-btn" id="copyBtn" type="button">Copy</button>
+              </div>
+              <pre id="responseBody">Send a request to see the response here.</pre>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="ui.js"></script>
+  </body>
+</html>
