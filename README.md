@@ -61,7 +61,13 @@ To run the harness locally you need:
 - .NET 9 SDK.
 - An OpenAI API key stored in the `OPENAI_API_KEY` environment variable.
 
-In Visual Studio Code, Run > Start Debugging (or F5) should start the ASP.NET application that serves both the agent's REST API and the lightweight Web UI. When running, use these local URLs:
+In Visual Studio Code, Run > Start Debugging (or F5); you may be prompted to:
+
+- Select Debugger (C#)
+- Select Launch Configuration (Default)
+- Select C# Startup Project (Agents)
+
+This should start the ASP.NET application that serves both the agent's REST API and the lightweight Web UI. When running, use these local URLs:
 
 - API health check: `http://localhost:5205/api` or `https://localhost:7000/api`
 - Web UI: `http://localhost:5205/ui.html` or `https://localhost:7000/ui.html`
