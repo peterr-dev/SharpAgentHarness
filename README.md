@@ -17,7 +17,7 @@ SharpAgentHarness is a C#/.NET project that implements a minimal, general-purpos
 - Function tools which can be organised into toolkits for specific use cases.
 - A lightweight Web UI for interacting with the agent's API.
 
-![web UI screenshot](./web%20UI.png)
+![web UI screenshot](./Screenshots/SendMessage.png)
 
 ## Project Structure
 
@@ -70,7 +70,19 @@ The UI defaults its base API URL to `http://localhost:5205/api`, so if you use t
 
 ## Example Flow
 
-**TBC**.
+Using the Web UI:
+
+1. Create a new session
+![Create Session screenshot](./Screenshots/CreateSession.png)
+
+2. Send a message to the agent
+![Send Message screenshot](./Screenshots/SendMessage.png)
+
+3. Inspect the session
+![Get Session screenshot](./Screenshots/GetSession.png)
+
+4. Inspect the event trace for the session
+![Get Events screenshot](./Screenshots/GetEvents.png)
 
 ## API
 
