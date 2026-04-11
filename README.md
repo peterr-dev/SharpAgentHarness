@@ -213,7 +213,7 @@ The project is designed as an experimental agent harness only, and is not suitab
 
 Potential future explorations and improvements include:
 
-- Experimental implementations of agentic concepts such as memory, subagents, skills and Recursive Language Models (RLMs).
+- Experimental implementations of agentic concepts such as memory, subagents, skills, Recursive Language Models (RLMs) and task-specific agents.
 - Persistent storage for sessions and events.
 - Streaming response support.
 - Support for Chat Completions-compatible APIs.
