@@ -29,14 +29,13 @@ The repo also contains a `Tests` project with a small set of integration-style t
 
 The harness takes an intentionally opinionated approach:
 
-- Only OpenAI's Responses API is currently supported.
+- Only a non-streaming subset of OpenAI's Responses API is currently supported.
 - `previous_response_id` is used to simplify conversational state handling.
 - `Tools` are organised into named `Toolkits`.
 - Each `Session` selects one `Toolkit` up front, and those tools are provided to the LLM on each turn.
 - `strict` mode is always used for function tools, in line with OpenAI guidance.
 - `prompt_cache_key` is used to improve the likelihood of prompt caching.
 - Sessions and events are persisted in memory only.
-- Streaming responses are not currently supported.
 
 These decisions were made to keep the harness small, focused, and easy to reason about while exploring agentic concepts.
 
