@@ -1,41 +1,29 @@
 # SharpAgentHarness
 
-SharpAgentHarness is a C#/.NET project that implements a minimal, general-purpose agent harness on top of the OpenAI Responses API with no external library dependencies beyond .NET itself. It demonstrates session management, tool calling, event tracing, and a clean REST API for experimenting with agentic concepts.
+SharpAgentHarness is a C#/.NET project that implements a minimal, general-purpose agent harness on top of the OpenAI Responses API with no external library dependencies beyond .NET itself. It's intended to act as a foundation for experimenting with the development of agents for business applications.
 
-## What This Project Demonstrates
+## What’s included
 
-- Designing a small foundational agent harness in C#/.NET, using only built-in .NET libraries so the core mechanics are easy to inspect.
-- Building a typed wrapper around a pragmatic subset of the OpenAI Responses API, to keep the integration explicit and focused only on the API capabilities the harness uses.
-- Exposing agent functionality through a clean ASP.NET REST API, supporting flexible use via alternative UIs, command line tools or schedulers.
-
-## Features
-
-- A clean C#/.NET implementation of a minimal agent harness which doesn't have any dependencies outside of the .NET Framework.
-- Strongly typed models of key agent concepts, including a pragmatic subset of the OpenAI Responses API.
+- A minimal agent harness implemented in C#/.NET whose core mechanics are easy to inspect.
+- A typed wrapper around a pragmatic subset of the OpenAI Responses API.
 - A REST API for interacting with the agent; creating sessions, sending messages, and inspecting sessions and event traces.
+- Function tools organised into named toolkits.
 - Event tracing for visibility of session activity.
-- Function tools which can be organised into toolkits for specific use cases.
 - A lightweight Web UI for interacting with the agent's API.
-
-![web UI screenshot](./Screenshots/SendMessage.png)
 
 ## Project Structure
 
-- `Agent` - Agent harness exposing a REST API (and lightweight Web UI).
+- `Agent` - Agent harness hosting the API (and Web UI).
 - `Tests` - A small set of integration-style tests that validate core aspects of harness behaviour.
 
 ## Architecture
-
-The harness is exposed through a REST API hosted by the `Agent` project, which also hosts a basic Web UI for exercising the API endpoints.
-
-Internally, the main elements of the agent are:
 
 - `Harness` - entry point used by the API to send messages to the agent.
 - `Session` - manages the state of a single conversation with the agent.
 - `Turn` - orchestrates a single agent turn within a `Session`, starting from a user message, handling any resulting tool calls and tool results, and returning the final output message.
 - `LlmRequest` and `LlmResponse` - model a strongly typed, pragmatic subset of the OpenAI Responses API.
 
-The repo also contains a `Tests` project with a small set of integration-style tests for specific test cases such as verifying prompt caching behaviour.  
+The repo also contains a `Tests` project with a small set of integration-style tests for verifying specific behaviours of the harness, such as prompt caching.  
 
 ## Design Choices
 
@@ -43,7 +31,7 @@ The harness takes an intentionally opinionated approach:
 
 - Only OpenAI's Responses API is currently supported.
 - `previous_response_id` is used to simplify conversational state handling.
-- `Tool`s are organised into named `Toolkit`s.
+- `Tools` are organised into named `Toolkits`.
 - Each `Session` selects one `Toolkit` up front, and those tools are provided to the LLM on each turn.
 - `strict` mode is always used for function tools, in line with OpenAI guidance.
 - `prompt_cache_key` is used to improve the likelihood of prompt caching.
@@ -54,7 +42,7 @@ These decisions were made to keep the harness small, focused, and easy to reason
 
 ## Running the Project
 
-These instructions assume you have opened the repository in VS Code.
+These instructions assume you have cloned and opened the repository in VS Code.
 
 To run the harness locally you need:
 
@@ -201,11 +189,10 @@ If the session does not exist, the API returns `404 Not Found`.
 This project is intentionally narrow in scope:
 
 - Sessions and events are stored in memory only.
-- Streaming responses are not supported.
-- Only OpenAI's Responses API is supported.
-- Tool selection happens once per session rather than dynamically per turn.
+- Only a (non-streaming) subset of OpenAI's Responses API is supported.
+- Tool selection happens on session creation, rather than dynamically per turn.
 - Tests are minimal and focused on core aspects of harness behaviour.
-- `Agent` hosts the Web UI.
+- The `Agent` projects also hosts the Web UI.
 
 The project is designed as an experimental agent harness only, and is not suitable for production use.
 
@@ -213,10 +200,10 @@ The project is designed as an experimental agent harness only, and is not suitab
 
 Potential future explorations and improvements include:
 
-- Experimental implementations of agentic concepts such as memory, subagents, skills and Recursive Language Models (RLMs).
+- Experimental implementations of agentic concepts and tools relevant to business applications, such as memory, subagents, long-horizon tasks and Recursive Language Models (RLMs).
 - Persistent storage for sessions and events.
-- Streaming response support.
 - Support for Chat Completions-compatible APIs.
+- Streaming response support.
 - API authentication and rate limiting.
 
 ## License
