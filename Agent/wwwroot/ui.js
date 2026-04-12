@@ -19,6 +19,13 @@ const requestDefinitions = {
         type: 'select',
         options: ['None', 'Minimal', 'Low', 'Medium', 'High', 'XHigh'],
         defaultValue: 'Minimal'
+      },
+      {
+        key: 'verbosity',
+        label: 'Text verbosity',
+        type: 'select',
+        options: ['Low', 'Medium', 'High'],
+        defaultValue: 'Low'
       }
     ]
   },
@@ -276,6 +283,7 @@ function buildRequest() {
     if (values.promptCacheKey) payload.promptCacheKey = values.promptCacheKey;
     if (values.tier) payload.tier = values.tier;
     if (values.reasoning) payload.reasoning = values.reasoning;
+    if (values.verbosity) payload.verbosity = values.verbosity;
   }
 
   if (requestTypeSelect.value === 'submit-message') {

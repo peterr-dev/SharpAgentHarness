@@ -32,6 +32,7 @@ namespace Agent
                     PromptCacheKey = session.PromptCacheKey,
                     PreviousResponseId = session.PreviousResponseId,
                     Reasoning = session.Reasoning,
+                    Verbosity = session.Verbosity,
                     Instructions = session.Instructions,
                     Toolkit = session.Toolkit,
                     InputMessage = nextInputMessage

@@ -20,7 +20,8 @@ const string DefaultModel = "gpt-5-nano";
 const string DefaultInstructions = "You are a helpful assistant.";
 const string DefaultPromptCacheKey = "SharpAgentHarness";
 const ServiceTier DefaultTier = ServiceTier.Auto;
-const ReasoningEffort DefaultReasoning = ReasoningEffort.Medium;
+const ReasoningEffort DefaultReasoning = ReasoningEffort.Low;
+const TextVerbosity DefaultVerbosity = TextVerbosity.Low;
 const string DefaultToolkit = "Default";
 
 var harness = new Harness();
@@ -45,6 +46,7 @@ app.MapPost("/api/sessions", (CreateSessionRequest? body) =>
             promptCacheKey: body?.PromptCacheKey ?? DefaultPromptCacheKey,
             tier: body?.Tier ?? DefaultTier,
             reasoning: body?.Reasoning ?? DefaultReasoning,
+            verbosity: body?.Verbosity ?? DefaultVerbosity,
             toolkit: Toolkits.Get(body?.Toolkit ?? DefaultToolkit));
         Sessions.Add(session);
         return Results.Ok(session);
@@ -187,6 +189,7 @@ record CreateSessionRequest(
     string? PromptCacheKey,
     ServiceTier? Tier,
     ReasoningEffort? Reasoning,
+    TextVerbosity? Verbosity,
     string? Toolkit);
 
 record SendMessageRequest(string message);

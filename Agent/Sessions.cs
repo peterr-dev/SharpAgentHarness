@@ -26,6 +26,15 @@ namespace Agent.Llm
         XHigh
     }
 
+    // Serialise enum values as readable strings in API responses.
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public enum TextVerbosity
+    {
+        Low,
+        Medium,
+        High
+    }
+
     public static class Sessions
     {
         private static readonly ConcurrentDictionary<Guid, Session> _sessions = new();
@@ -66,6 +75,8 @@ namespace Agent.Llm
 
         public ReasoningEffort Reasoning { get; init; }
 
+        public TextVerbosity Verbosity { get; init; }
+
         /// <summary>
         /// Populated from turn two onwards
         /// </summary>
@@ -88,7 +99,7 @@ namespace Agent.Llm
 
         private readonly Turn _turn;
 
-        public Session(string model, string instructions, string promptCacheKey, ServiceTier tier, ReasoningEffort reasoning, Toolkit toolkit, int maxIterations = 5)
+        public Session(string model, string instructions, string promptCacheKey, ServiceTier tier, ReasoningEffort reasoning, TextVerbosity verbosity, Toolkit toolkit, int maxIterations = 5)
         {
             if (toolkit is null) throw new ArgumentNullException(nameof(toolkit));
 
@@ -97,6 +108,7 @@ namespace Agent.Llm
             PromptCacheKey = promptCacheKey;
             Tier = tier;
             Reasoning = reasoning;
+            Verbosity = verbosity;
             ToolkitName = toolkit.Name;
             Toolkit = toolkit;
             _turn = new Turn(maxIterations);

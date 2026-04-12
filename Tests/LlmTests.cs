@@ -12,6 +12,7 @@ public class LlmTests
     private const string DefaultModel = "gpt-5-nano";
     private const string DefaultPromptCacheKey = "Test";
     private const ReasoningEffort DefaultReasoning = ReasoningEffort.Low;
+    private const TextVerbosity DefaultVerbosity = TextVerbosity.Low;
 
     public LlmTests(ITestOutputHelper output)
     {
@@ -226,6 +227,7 @@ public class LlmTests
             promptCacheKey: DefaultPromptCacheKey,
             tier: ServiceTier.Default,
             reasoning: DefaultReasoning,
+            verbosity: DefaultVerbosity,
             toolkit: toolkit);
 
         Request request = new Request
@@ -276,6 +278,7 @@ public class LlmTests
             promptCacheKey: DefaultPromptCacheKey,
             tier: ServiceTier.Default,
             reasoning: DefaultReasoning,
+            verbosity: DefaultVerbosity,
             toolkit: toolkit);
 
         Request request = new Request
@@ -330,6 +333,7 @@ public class LlmTests
             promptCacheKey: DefaultPromptCacheKey,
             tier: ServiceTier.Default,
             reasoning: DefaultReasoning,
+            verbosity: DefaultVerbosity,
             toolkit: toolkit);
 
         var req1 = new Request
@@ -371,6 +375,7 @@ public class LlmTests
             Model = DefaultModel,
             PromptCacheKey = DefaultPromptCacheKey,
             Reasoning = DefaultReasoning,
+            Verbosity = DefaultVerbosity,
             PreviousResponseId = firstSuccess.Id,
             Instructions = "You are a helpful assistant. When a tool returns the current time, reply with exactly the returned timestamp and nothing else.",
             Toolkit = toolkit,
@@ -444,6 +449,7 @@ public class LlmTests
             promptCacheKey: DefaultPromptCacheKey,
             tier: ServiceTier.Default,
             reasoning: DefaultReasoning,
+            verbosity: DefaultVerbosity,
             toolkit: toolkit);
 
         for (int turn = 0; turn < maxTurns; turn++)
@@ -538,6 +544,7 @@ public class LlmTests
             promptCacheKey: DefaultPromptCacheKey,
             tier: ServiceTier.Default,
             reasoning: DefaultReasoning,
+            verbosity: DefaultVerbosity,
             toolkit: toolkit);
 
         // Cancel the token before the call so HttpClient throws immediately

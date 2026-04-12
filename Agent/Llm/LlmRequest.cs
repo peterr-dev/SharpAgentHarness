@@ -39,6 +39,8 @@ namespace Agent.Llm
 
         public ReasoningEffort Reasoning { get; init; }
 
+        public TextVerbosity Verbosity { get; init; }
+
         /// <summary>
         /// Populated from turn two onwards
         /// </summary>
@@ -75,7 +77,7 @@ namespace Agent.Llm
                 Reasoning = new ReasoningConfig { Effort = ToApiValue(Reasoning) },
                 Text = new TextConfig
                 {
-                    Verbosity = "medium"
+                    Verbosity = ToApiValue(Verbosity)
                 }
             };
 
@@ -137,6 +139,14 @@ namespace Agent.Llm
         {
             MessageRole.User => "user",
             MessageRole.Assistant => "assistant",
+            _ => throw new ArgumentOutOfRangeException(nameof(value), value, null)
+        };
+
+        private static string ToApiValue(TextVerbosity value) => value switch
+        {
+            TextVerbosity.Low => "low",
+            TextVerbosity.Medium => "medium",
+            TextVerbosity.High => "high",
             _ => throw new ArgumentOutOfRangeException(nameof(value), value, null)
         };
 
