@@ -2,44 +2,44 @@ using Agent.Llm;
 
 namespace Agent
 {
-    public interface ISessionEvent
+    public interface IAgentEvent
     {
-        Session Session { get; }
+        Agent Agent { get; }
     }
 
-    public sealed record TurnStarted(Session session) : ISessionEvent
+    public sealed record TurnStarted(Agent agent) : IAgentEvent
     {
-        public Session Session => session;
+        public Agent Agent => agent;
     }
 
-    public sealed record LlmRequestSent(Session session, Request req) : ISessionEvent
+    public sealed record LlmRequestSent(Agent agent, Request req) : IAgentEvent
     {
-        public Session Session => session;
+        public Agent Agent => agent;
     }
 
-    public sealed record LlmResponseReceived(Session session, Response resp) : ISessionEvent
+    public sealed record LlmResponseReceived(Agent agent, Response resp) : IAgentEvent
     {
-        public Session Session => session;
+        public Agent Agent => agent;
     }
 
-    public sealed record ToolCallRequested(Session session, ResponseOutputItemFunctionCall toolCall) : ISessionEvent
+    public sealed record ToolCallRequested(Agent agent, ResponseOutputItemFunctionCall toolCall) : IAgentEvent
     {
-        public Session Session => session;
+        public Agent Agent => agent;
     }
 
-    public sealed record ToolCallCompleted(Session session, ResponseOutputItemFunctionCall toolCall, string resultText) : ISessionEvent
+    public sealed record ToolCallCompleted(Agent agent, ResponseOutputItemFunctionCall toolCall, string resultText) : IAgentEvent
     {
-        public Session Session => session;
+        public Agent Agent => agent;
     }
 
-    public sealed record TurnCompleted(Session session) : ISessionEvent
+    public sealed record TurnCompleted(Agent agent) : IAgentEvent
     {
-        public Session Session => session;
+        public Agent Agent => agent;
     }
 
-    public sealed record LlmRawRequestSent(Session session, string RequestBody) : ISessionEvent
+    public sealed record LlmRawRequestSent(Agent agent, string RequestBody) : IAgentEvent
     {
-        public Session Session => session;
+        public Agent Agent => agent;
     }
 
     public static class EventTraces
@@ -73,38 +73,38 @@ namespace Agent
             }
         }
 
-        public static IReadOnlyList<ISessionEvent> GetEventsForSession(Session session)
+        public static IReadOnlyList<IAgentEvent> GetEventsForAgent(Agent agent)
         {
-            if (session is null) throw new ArgumentNullException(nameof(session));
+            if (agent is null) throw new ArgumentNullException(nameof(agent));
 
-            return GetEventsForSession(session.Id);
+            return GetEventsForAgent(agent.Id);
         }
 
-        public static IReadOnlyList<ISessionEvent> GetEventsForSession(Guid sessionId)
+        public static IReadOnlyList<IAgentEvent> GetEventsForAgent(Guid agentId)
         {
             lock (_lock)
             {
                 return _events
-                    .OfType<ISessionEvent>()
-                    .Where(evt => evt.Session.Id == sessionId)
+                    .OfType<IAgentEvent>()
+                    .Where(evt => evt.Agent.Id == agentId)
                     .ToList();
             }
         }
 
-        public static IReadOnlyList<TEvent> GetEventsForSession<TEvent>(Session session) where TEvent : ISessionEvent
+        public static IReadOnlyList<TEvent> GetEventsForAgent<TEvent>(Agent agent) where TEvent : IAgentEvent
         {
-            if (session is null) throw new ArgumentNullException(nameof(session));
+            if (agent is null) throw new ArgumentNullException(nameof(agent));
 
-            return GetEventsForSession<TEvent>(session.Id);
+            return GetEventsForAgent<TEvent>(agent.Id);
         }
 
-        public static IReadOnlyList<TEvent> GetEventsForSession<TEvent>(Guid sessionId) where TEvent : ISessionEvent
+        public static IReadOnlyList<TEvent> GetEventsForAgent<TEvent>(Guid agentId) where TEvent : IAgentEvent
         {
             lock (_lock)
             {
                 return _events
                     .OfType<TEvent>()
-                    .Where(evt => evt.Session.Id == sessionId)
+                    .Where(evt => evt.Agent.Id == agentId)
                     .ToList();
             }
         }

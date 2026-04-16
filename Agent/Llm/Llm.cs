@@ -8,28 +8,28 @@ namespace Agent.Llm
 
         private const string OpenAiResponsesUrl = "https://api.openai.com/v1/responses";
 
-        public Task<Response> SendMessageAsync(Session session, Request req)
+        public Task<Response> SendMessageAsync(Agent agent, Request req)
         {
-            if (session is null) throw new ArgumentNullException(nameof(session));
-            return SendMessageAsync(session, req, CancellationToken.None);
+            if (agent is null) throw new ArgumentNullException(nameof(agent));
+            return SendMessageAsync(agent, req, CancellationToken.None);
         }
 
-        public virtual async Task<Response> SendMessageAsync(Session session, Request req, CancellationToken cancellationToken)
+        public virtual async Task<Response> SendMessageAsync(Agent agent, Request req, CancellationToken cancellationToken)
         {
-            if (session is null) throw new ArgumentNullException(nameof(session));
-            return await SendMessageCoreAsync(session, req, cancellationToken);
+            if (agent is null) throw new ArgumentNullException(nameof(agent));
+            return await SendMessageCoreAsync(agent, req, cancellationToken);
         }
 
-        private async Task<Response> SendMessageCoreAsync(Session? session, Request req, CancellationToken cancellationToken)
+        private async Task<Response> SendMessageCoreAsync(Agent? agent, Request req, CancellationToken cancellationToken)
         {
             using var httpReq = new HttpRequestMessage(HttpMethod.Post, OpenAiResponsesUrl);
 
             string apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? throw new InvalidOperationException("Environment variable 'OPENAI_API_KEY' is not set.");
             httpReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
             string reqBody = req.ToOpenAiResponsesBody();
-            if (session is not null)
+            if (agent is not null)
             {
-                EventTraces.Publish(new LlmRawRequestSent(session, reqBody));
+                EventTraces.Publish(new LlmRawRequestSent(agent, reqBody));
             }
 
             httpReq.Content = new StringContent(reqBody, Encoding.UTF8, "application/json");
