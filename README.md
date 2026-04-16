@@ -4,9 +4,8 @@ A minimal, general-purpose agent harness written in C#/.NET, providing a foundat
 
 ## What’s included
 
-- A minimal agent harness implemented in C#/.NET whose core mechanics are easy to inspect.
 - A typed wrapper around a pragmatic subset of the OpenAI Responses API.
-- A REST API for interacting with the agent; creating agents, sending messages, and inspecting agents and event traces.
+- A REST API for creating agents, sending messages, and inspecting agents and event traces.
 - Function tools organised into named toolkits.
 - Event tracing for visibility of agent activity.
 - A lightweight Web UI for interacting with the agent's API.
