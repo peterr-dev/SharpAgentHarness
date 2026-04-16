@@ -1,6 +1,6 @@
-# SharpAgentHarness
+# Sharp Agent Harness
 
-SharpAgentHarness is a C#/.NET project that implements a minimal, general-purpose agent harness on top of the OpenAI Responses API with no external library dependencies beyond .NET itself. It's intended to act as a foundation for experimenting with the development of agents for business applications.
+A minimal, general-purpose agent harness written in C#/.NET, providing a foundation for experimenting with the development of agents for business use.
 
 ## What’s included
 
@@ -117,12 +117,12 @@ Example request body:
 
 ```json
 {
-	"model": "gpt-5-nano",
-	"instructions": "You are a helpful assistant.",
-	"promptCacheKey": "SharpAgentHarness",
-	"tier": "Auto",
-	"reasoning": "Medium",
-	"toolkit": "default"
+  "model": "gpt-5-nano",
+  "instructions": "You are a helpful assistant.",
+  "promptCacheKey": "SharpAgentHarness",
+  "tier": "Auto",
+  "reasoning": "Medium",
+  "toolkit": "default"
 }
 ```
 
@@ -130,20 +130,20 @@ Example response body:
 
 ```json
 {
-	"id": "8c6d4e4f-3f64-4dbe-a474-f0df2a87c1d2",
-	"model": "gpt-5-nano",
-	"tier": "Auto",
-	"promptCacheKey": "SharpAgentHarness",
-	"reasoning": "Medium",
-	"previousResponseId": null,
-	"instructions": "You are a helpful assistant.",
-	"toolkitName": "default",
-	"usageTotals": {
-		"inputTokens": 0,
-		"cachedInputTokens": 0,
-		"outputTokens": 0,
-		"reasoningOutputTokens": 0
-	}
+  "id": "8c6d4e4f-3f64-4dbe-a474-f0df2a87c1d2",
+  "model": "gpt-5-nano",
+  "tier": "Auto",
+  "promptCacheKey": "SharpAgentHarness",
+  "reasoning": "Medium",
+  "previousResponseId": null,
+  "instructions": "You are a helpful assistant.",
+  "toolkitName": "default",
+  "usageTotals": {
+    "inputTokens": 0,
+    "cachedInputTokens": 0,
+    "outputTokens": 0,
+    "reasoningOutputTokens": 0
+  }
 }
 ```
 
@@ -170,7 +170,7 @@ Example request body:
 
 ```json
 {
-	"message": "What time is it?"
+  "message": "What time is it?"
 }
 ```
 
@@ -178,7 +178,7 @@ Example response body:
 
 ```json
 {
-	"response": "The current time is ..."
+  "response": "The current time is ..."
 }
 ```
 

@@ -14,3 +14,7 @@ This repo is a minimal, general-purpose, tool-using agent harness. It was create
 ## UX
 - Style the UI inspired by OpenAI's style (light theme).
 - Wrap all API calls from the web UI, to catch errors and visualise them for the user.
+
+## Testing
+
+This repo only defines integration-style tests which validate agent behaviours of particular interest. Only propose adding a new test if you think it fits this brief.
