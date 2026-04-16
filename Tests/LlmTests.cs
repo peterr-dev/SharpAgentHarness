@@ -68,9 +68,9 @@ public class LlmTests
         string? TextVerbosity,
         string? PreviousResponseId);
 
-    private void AssertRawRequestsLookCacheable(Session session, IReadOnlyList<string> responseIds)
+    private void AssertRawRequestsLookCacheable(Agent agent, IReadOnlyList<string> responseIds)
     {
-        var rawRequestEvents = EventTraces.GetEventsForSession<LlmRawRequestSent>(session);
+        var rawRequestEvents = EventTraces.GetEventsForAgent<LlmRawRequestSent>(agent);
 
         Assert.NotEmpty(rawRequestEvents);
         Assert.True(
@@ -221,7 +221,7 @@ public class LlmTests
         LlmClient llm = new LlmClient();
         var toolkit = new Toolkit("integration_test");
 
-        Session session = new Session(
+        Agent agent = new Agent(
             model: DefaultModel,
             instructions: "You are a helpful assistant.",
             promptCacheKey: DefaultPromptCacheKey,
@@ -246,7 +246,7 @@ public class LlmTests
         _output.WriteLine($"User: {(request.InputMessage as EasyInputMessage)?.Content}");
 
         // Act
-        Response response = await llm.SendMessageAsync(session, request);
+        Response response = await llm.SendMessageAsync(agent, request);
 
         // Assert — expect a successful response with at least one output item
         Assert.NotNull(response);
@@ -272,7 +272,7 @@ public class LlmTests
         var toolkit = new Toolkit("integration_test");
         toolkit.Add(new GetCurrentTimeTool());
 
-        Session session = new Session(
+        Agent agent = new Agent(
             model: DefaultModel,
             instructions: "You are a helpful assistant.",
             promptCacheKey: DefaultPromptCacheKey,
@@ -297,7 +297,7 @@ public class LlmTests
 
         _output.WriteLine($"User: {(request.InputMessage as EasyInputMessage)?.Content}");
 
-        Response response = await llm.SendMessageAsync(session, request);
+        Response response = await llm.SendMessageAsync(agent, request);
 
         // Assert — expect the model to have requested the get_current_time tool
         Assert.NotNull(response);
@@ -327,7 +327,7 @@ public class LlmTests
         var toolkit = new Toolkit("integration_test");
         toolkit.Add(new GetCurrentTimeTool());
 
-        Session session = new Session(
+        Agent agent = new Agent(
             model: DefaultModel,
             instructions: "You are a helpful assistant.",
             promptCacheKey: DefaultPromptCacheKey,
@@ -353,7 +353,7 @@ public class LlmTests
         _output.WriteLine($"User: {(req1.InputMessage as EasyInputMessage)?.Content}");
 
         // Act - first turn should request the tool
-        Response firstResponse = await llm.SendMessageAsync(session, req1);
+        Response firstResponse = await llm.SendMessageAsync(agent, req1);
 
         // Assert - tool call requested
         var firstSuccess = Assert.IsType<SuccessResponse>(firstResponse);
@@ -387,7 +387,7 @@ public class LlmTests
             Tier = ServiceTier.Default
         };
 
-        Response resp2 = await llm.SendMessageAsync(session, req2);
+        Response resp2 = await llm.SendMessageAsync(agent, req2);
 
         // Assert - assistant answers with the tool result
         var secondSuccess = Assert.IsType<SuccessResponse>(resp2);
@@ -443,7 +443,7 @@ public class LlmTests
             "Got it. Please confirm you have answered all my questions."
         ];
 
-        Session session = new Session(
+        Agent agent = new Agent(
             model: DefaultModel,
             instructions: LargeSystemPrompt,
             promptCacheKey: DefaultPromptCacheKey,
@@ -472,7 +472,7 @@ public class LlmTests
             _output.WriteLine($"--- Turn {turn + 1} ---");
             _output.WriteLine($"User: {(request.InputMessage as EasyInputMessage)?.Content}");
 
-            Response response = await llm.SendMessageAsync(session, request);
+            Response response = await llm.SendMessageAsync(agent, request);
             var success = Assert.IsType<SuccessResponse>(response);
             Assert.False(string.IsNullOrWhiteSpace(success.Id));
             responseIds.Add(success.Id!);
@@ -515,7 +515,7 @@ public class LlmTests
         if (!sawCachedTokens)
         {
             _output.WriteLine("Cached tokens were not observed; inspecting raw request events for cache-sensitive fields.");
-            AssertRawRequestsLookCacheable(session, responseIds);
+            AssertRawRequestsLookCacheable(agent, responseIds);
 
             Assert.False(
                 exceededInputTokenBudget,
@@ -538,7 +538,7 @@ public class LlmTests
         var turn = new Turn(maxIterations: 1);
         var toolkit = new Toolkit("integration_test");
 
-        Session session = new Session(
+        Agent agent = new Agent(
             model: DefaultModel,
             instructions: "You are a helpful assistant.",
             promptCacheKey: DefaultPromptCacheKey,
@@ -553,6 +553,6 @@ public class LlmTests
 
         // Act & Assert — the already-cancelled token should propagate as OperationCanceledException
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => turn.RunTurnAsync(session, "Hello", cts.Token));
+            () => turn.RunTurnAsync(agent, "Hello", cts.Token));
     }
 }

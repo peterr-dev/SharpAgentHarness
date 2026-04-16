@@ -1,7 +1,7 @@
 const requestDefinitions = {
-  'create-session': {
+  'create-agent': {
     method: 'POST',
-    path: '/sessions',
+    path: '/agents',
     fields: [
       { key: 'model', label: 'Model', type: 'text', placeholder: 'gpt-5-nano', defaultValue: 'gpt-5-nano' },
       { key: 'instructions', label: 'Instructions', type: 'textarea', placeholder: 'You are a helpful assistant.', defaultValue: 'You are a helpful assistant.' },
@@ -31,21 +31,21 @@ const requestDefinitions = {
   },
   'submit-message': {
     method: 'POST',
-    path: '/sessions/{sessionId}/messages',
+    path: '/agents/{agentId}/messages',
     fields: [
-      { key: 'sessionId', label: 'Session ID', type: 'text', placeholder: 'GUID', required: true },
+      { key: 'agentId', label: 'Agent ID', type: 'text', placeholder: 'GUID', required: true },
       { key: 'message', label: 'Message', type: 'textarea', placeholder: 'Hello there', required: true }
     ]
   },
-  'get-session': {
+  'get-agent': {
     method: 'GET',
-    path: '/sessions/{sessionId}',
-    fields: [{ key: 'sessionId', label: 'Session ID', type: 'text', placeholder: 'GUID', required: true }]
+    path: '/agents/{agentId}',
+    fields: [{ key: 'agentId', label: 'Agent ID', type: 'text', placeholder: 'GUID', required: true }]
   },
   'get-events': {
     method: 'GET',
-    path: '/sessions/{sessionId}/events',
-    fields: [{ key: 'sessionId', label: 'Session ID', type: 'text', placeholder: 'GUID', required: true }]
+    path: '/agents/{agentId}/events',
+    fields: [{ key: 'agentId', label: 'Agent ID', type: 'text', placeholder: 'GUID', required: true }]
   }
 };
 
@@ -60,35 +60,35 @@ const responseBody = document.getElementById('responseBody');
 const copyBtn = document.getElementById('copyBtn');
 
 
-// Keep track of the most recently created session so follow-up calls are quicker to fill in.
-const LAST_SESSION_ID_STORAGE_KEY = 'sharpAgentLastSessionId';
-let lastCreatedSessionId = loadLastSessionId();
+// Keep track of the most recently created agent so follow-up calls are quicker to fill in.
+const LAST_AGENT_ID_STORAGE_KEY = 'sharpAgentLastAgentId';
+let lastCreatedAgentId = loadLastAgentId();
 
-function loadLastSessionId() {
+function loadLastAgentId() {
   try {
-    return localStorage.getItem(LAST_SESSION_ID_STORAGE_KEY) || '';
+    return localStorage.getItem(LAST_AGENT_ID_STORAGE_KEY) || '';
   } catch {
     return '';
   }
 }
 
-function saveLastSessionId(sessionId) {
-  lastCreatedSessionId = sessionId;
+function saveLastAgentId(agentId) {
+  lastCreatedAgentId = agentId;
 
   try {
-    localStorage.setItem(LAST_SESSION_ID_STORAGE_KEY, sessionId);
+    localStorage.setItem(LAST_AGENT_ID_STORAGE_KEY, agentId);
   } catch {
-    // Ignore storage write errors, because session auto-fill is a convenience feature.
+    // Ignore storage write errors, because agent auto-fill is a convenience feature.
   }
 }
 
-function findSessionIdFromResponse(responseText) {
+function findAgentIdFromResponse(responseText) {
   try {
     const parsed = JSON.parse(responseText);
 
     if (parsed && typeof parsed === 'object') {
       if (typeof parsed.id === 'string') return parsed.id;
-      if (typeof parsed.sessionId === 'string') return parsed.sessionId;
+      if (typeof parsed.agentId === 'string') return parsed.agentId;
     }
   } catch {
     return '';
@@ -97,18 +97,18 @@ function findSessionIdFromResponse(responseText) {
   return '';
 }
 
-function populateSessionIdFieldIfAvailable() {
-  if (!lastCreatedSessionId) {
+function populateAgentIdFieldIfAvailable() {
+  if (!lastCreatedAgentId) {
     return;
   }
 
-  const sessionIdField = dynamicFields.querySelector('[data-field="sessionId"]');
-  if (!sessionIdField) {
+  const agentIdField = dynamicFields.querySelector('[data-field="agentId"]');
+  if (!agentIdField) {
     return;
   }
 
-  if (!sessionIdField.value.trim()) {
-    sessionIdField.value = lastCreatedSessionId;
+  if (!agentIdField.value.trim()) {
+    agentIdField.value = lastCreatedAgentId;
   }
 }
 
@@ -131,7 +131,7 @@ function getCachedInputTokens(responseText) {
       parsed?.usageTotals?.cachedInputTokens,
       parsed?.usage?.cachedInputTokens,
       parsed?.details?.response?.usage?.cachedInputTokens,
-      parsed?.details?.session?.usageTotals?.cachedInputTokens
+      parsed?.details?.agent?.usageTotals?.cachedInputTokens
     ];
 
     for (const candidate of candidates) {
@@ -145,7 +145,7 @@ function getCachedInputTokens(responseText) {
       for (let index = parsed.length - 1; index >= 0; index -= 1) {
         const item = parsed[index];
         const eventCachedTokens = item?.details?.response?.usage?.cachedInputTokens
-          ?? item?.details?.session?.usageTotals?.cachedInputTokens;
+          ?? item?.details?.agent?.usageTotals?.cachedInputTokens;
 
         if (typeof eventCachedTokens === 'number' && Number.isFinite(eventCachedTokens) && eventCachedTokens >= 0) {
           return eventCachedTokens;
@@ -210,7 +210,7 @@ function renderDynamicFields() {
     dynamicFields.appendChild(row);
   });
 
-  populateSessionIdFieldIfAvailable();
+  populateAgentIdFieldIfAvailable();
 }
 
 function readFormValues() {
@@ -271,12 +271,12 @@ function buildRequest() {
   }
 
   let path = definition.path;
-  if (values.sessionId) {
-    path = path.replace('{sessionId}', encodeURIComponent(values.sessionId));
+  if (values.agentId) {
+    path = path.replace('{agentId}', encodeURIComponent(values.agentId));
   }
 
   let payload;
-  if (requestTypeSelect.value === 'create-session') {
+  if (requestTypeSelect.value === 'create-agent') {
     payload = {};
     if (values.model) payload.model = values.model;
     if (values.instructions) payload.instructions = values.instructions;
@@ -319,17 +319,17 @@ async function sendRequest() {
     responseBody.textContent = formatIfJson(result.text) || '(empty response body)';
     let cachedInputTokens = getCachedInputTokens(result.text);
 
-    // Sending a message returns only assistant text, so fetch the session snapshot to show cache status.
+    // Sending a message returns only assistant text, so fetch the agent snapshot to show cache status.
     if (requestTypeSelect.value === 'submit-message' && cachedInputTokens === null && result.ok) {
       const formValues = readFormValues();
-      const sessionId = formValues.sessionId;
+      const agentId = formValues.agentId;
 
-      if (sessionId) {
+      if (agentId) {
         const baseUrl = baseUrlInput.value.trim().replace(/\/$/, '');
-        const sessionSnapshot = await callApi(`${baseUrl}/sessions/${encodeURIComponent(sessionId)}`, 'GET');
+        const agentSnapshot = await callApi(`${baseUrl}/agents/${encodeURIComponent(agentId)}`, 'GET');
 
-        if (sessionSnapshot.ok) {
-          cachedInputTokens = getCachedInputTokens(sessionSnapshot.text);
+        if (agentSnapshot.ok) {
+          cachedInputTokens = getCachedInputTokens(agentSnapshot.text);
         }
       }
     }
@@ -343,10 +343,10 @@ async function sendRequest() {
       setCacheStatus('No cached input tokens', 'miss');
     }
 
-    if (requestTypeSelect.value === 'create-session' && result.ok) {
-      const createdSessionId = findSessionIdFromResponse(result.text);
-      if (createdSessionId) {
-        saveLastSessionId(createdSessionId);
+    if (requestTypeSelect.value === 'create-agent' && result.ok) {
+      const createdAgentId = findAgentIdFromResponse(result.text);
+      if (createdAgentId) {
+        saveLastAgentId(createdAgentId);
       }
     }
   } catch (error) {
