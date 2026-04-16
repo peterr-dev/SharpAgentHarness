@@ -1,8 +1,7 @@
-﻿using Agent.Tools;
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Agent.Llm
+namespace Core.Llm
 {
     /// <summary>
     /// Send System Prompts in the <see cref="Request.Instructions"/> property

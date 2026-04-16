@@ -1,8 +1,8 @@
-using Agent.Tools;
 using System.Collections.Concurrent;
 using System.Text.Json.Serialization;
+using Core.Llm;
 
-namespace Agent.Llm
+namespace Core
 {
     // Serialise enum values as readable strings in API responses.
     [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -35,35 +35,35 @@ namespace Agent.Llm
         High
     }
 
-    public static class Agents
+    public static class Sessions
     {
-        private static readonly ConcurrentDictionary<Guid, Agent> _agents = new();
+        private static readonly ConcurrentDictionary<Guid, Session> _sessions = new();
 
-        public static void Add(Agent agent)
+        public static void Add(Session session)
         {
-            _agents[agent.Id] = agent;
+            _sessions[session.Id] = session;
         }
 
-        public static Agent GetAgent(Guid agentId)
+        public static Session GetSession(Guid sessionId)
         {
-            if (_agents.TryGetValue(agentId, out var agent))
-                return agent;
+            if (_sessions.TryGetValue(sessionId, out var session))
+                return session;
 
-            throw new KeyNotFoundException($"Agent with ID '{agentId}' not found.");
+            throw new KeyNotFoundException($"Session with ID '{sessionId}' not found.");
         }
 
-        public static bool Remove(Guid agentId)
+        public static bool Remove(Guid sessionId)
         {
-            return _agents.TryRemove(agentId, out _);
+            return _sessions.TryRemove(sessionId, out _);
         }
 
         public static void Clear()
         {
-            _agents.Clear();
+            _sessions.Clear();
         }
     }
 
-    public class Agent
+    public class Session
     {
         public Guid Id { get; } = Guid.NewGuid();
 
@@ -90,16 +90,16 @@ namespace Agent.Llm
         public string ToolkitName { get; init; }
 
         /// <summary>
-        /// Running token usage totals accumulated across all successful LLM responses in this agent.
+        /// Running token usage totals accumulated across all successful LLM responses in this session.
         /// </summary>
-        public AgentUsageTotals UsageTotals { get; } = new();
+        public SessionUsageTotals UsageTotals { get; } = new();
 
         [JsonIgnore]
         public Toolkit Toolkit { get; }
 
         private readonly Turn _turn;
 
-        public Agent(string model, string instructions, string promptCacheKey, ServiceTier tier, ReasoningEffort reasoning, TextVerbosity verbosity, Toolkit toolkit, int maxIterations = 5)
+        public Session(string model, string instructions, string promptCacheKey, ServiceTier tier, ReasoningEffort reasoning, TextVerbosity verbosity, Toolkit toolkit, int maxIterations = 5)
         {
             if (toolkit is null) throw new ArgumentNullException(nameof(toolkit));
 
@@ -121,38 +121,38 @@ namespace Agent.Llm
         }
 
         /// <summary>
-        /// Send an incoming user message for an agent turn.
+        /// Send an incoming user message for a session turn.
         /// </summary>
-        public static async Task<string> HandleMessageAsync(Guid agentId, string userMessage)
+        public static async Task<string> HandleMessageAsync(Guid sessionId, string userMessage)
         {
             if (string.IsNullOrWhiteSpace(userMessage))
                 throw new ArgumentException("User message is required.", nameof(userMessage));
 
-            var agent = Agents.GetAgent(agentId);
-            string response = await agent.SendMessage(userMessage);
+            var session = Sessions.GetSession(sessionId);
+            string response = await session.SendMessage(userMessage);
             return response;
         }
     }
 
-    public class AgentUsageTotals
+    public class SessionUsageTotals
     {
         /// <summary>
-        /// Total input tokens across all responses in the agent.
+        /// Total input tokens across all responses in the session.
         /// </summary>
         public int InputTokens { get; private set; }
 
         /// <summary>
-        /// Total cached input tokens across all responses in the agent.
+        /// Total cached input tokens across all responses in the session.
         /// </summary>
         public int CachedInputTokens { get; private set; }
 
         /// <summary>
-        /// Total output tokens across all responses in the agent.
+        /// Total output tokens across all responses in the session.
         /// </summary>
         public int OutputTokens { get; private set; }
 
         /// <summary>
-        /// Total reasoning output tokens across all responses in the agent.
+        /// Total reasoning output tokens across all responses in the session.
         /// </summary>
         public int ReasoningOutputTokens { get; private set; }
 

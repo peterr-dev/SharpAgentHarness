@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace Agent.Tools
+namespace Core
 {
     // Serialise enum values as readable strings in API responses.
     [JsonConverter(typeof(JsonStringEnumConverter))]

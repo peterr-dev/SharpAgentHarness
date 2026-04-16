@@ -1,7 +1,6 @@
-﻿using Agent.Llm;
-using Agent.Tools;
+﻿using Core.Llm;
 
-namespace Agent
+namespace Core
 {
     public class Turn
     {
@@ -15,39 +14,39 @@ namespace Agent
             _maxIterations = maxIterations;
         }
 
-        public async Task<string> RunTurnAsync(Agent agent, string userMessage, CancellationToken cancellationToken = default)
+        public async Task<string> RunTurnAsync(Session session, string userMessage, CancellationToken cancellationToken = default)
         {
-            if (agent is null) throw new ArgumentNullException(nameof(agent));
+            if (session is null) throw new ArgumentNullException(nameof(session));
             if (string.IsNullOrWhiteSpace(userMessage)) throw new ArgumentNullException(nameof(userMessage));
             Message nextInputMessage = new EasyInputMessage { Content = userMessage };
 
-            EventTraces.Publish(new TurnStarted(agent));
+            EventTraces.Publish(new TurnStarted(session));
 
             for (var iteration = 0; iteration < _maxIterations; iteration++)
             {
                 Request req = new Request
                 {
-                    Model = agent.Model,
-                    Tier = agent.Tier,
-                    PromptCacheKey = agent.PromptCacheKey,
-                    PreviousResponseId = agent.PreviousResponseId,
-                    Reasoning = agent.Reasoning,
-                    Verbosity = agent.Verbosity,
-                    Instructions = agent.Instructions,
-                    Toolkit = agent.Toolkit,
+                    Model = session.Model,
+                    Tier = session.Tier,
+                    PromptCacheKey = session.PromptCacheKey,
+                    PreviousResponseId = session.PreviousResponseId,
+                    Reasoning = session.Reasoning,
+                    Verbosity = session.Verbosity,
+                    Instructions = session.Instructions,
+                    Toolkit = session.Toolkit,
                     InputMessage = nextInputMessage
                 };
 
-                EventTraces.Publish(new LlmRequestSent(agent, req));
-                var response = await _llmClient.SendMessageAsync(agent, req, cancellationToken);
+                EventTraces.Publish(new LlmRequestSent(session, req));
+                var response = await _llmClient.SendMessageAsync(session, req, cancellationToken);
 
                 if (response is ErrorResponse error)
                     throw new InvalidOperationException(error.Message ?? "The LLM request failed.");
 
                 var successResponse = response as SuccessResponse
                     ?? throw new InvalidOperationException("The LLM returned an unknown response type.");
-                agent.PreviousResponseId = successResponse.Id;
-                agent.UsageTotals.Add(successResponse.Usage);
+                session.PreviousResponseId = successResponse.Id;
+                session.UsageTotals.Add(successResponse.Usage);
 
                 List<ResponseOutputItemFunctionCall> toolCalls = successResponse.Output
                     .OfType<ResponseOutputItemFunctionCall>()
@@ -55,7 +54,7 @@ namespace Agent
                         !string.IsNullOrWhiteSpace(toolCall.CallId) &&
                         !string.IsNullOrWhiteSpace(toolCall.Name))
                     .ToList();
-                EventTraces.Publish(new LlmResponseReceived(agent, response));
+                EventTraces.Publish(new LlmResponseReceived(session, response));
 
                 if (toolCalls.Count == 0)
                 {
@@ -66,22 +65,22 @@ namespace Agent
                         .SelectMany(message => message.Content.OfType<ResponseContentPartText>())
                         .Select(content => content.Text)
                         .Where(text => !string.IsNullOrWhiteSpace(text)));
-                    EventTraces.Publish(new TurnCompleted(agent));
+                    EventTraces.Publish(new TurnCompleted(session));
                     return finalAnswer;
                 }
                 else if (toolCalls.Count > 1)
                 {
-                    throw new InvalidOperationException("Parallel tool calls are not supported in this version of the agent loop.");
+                    throw new InvalidOperationException("Parallel tool calls are not supported.");
                 }
                 else
                 {
                     ResponseOutputItemFunctionCall toolCall = toolCalls.First();
-                    EventTraces.Publish(new ToolCallRequested(agent, toolCall));
+                    EventTraces.Publish(new ToolCallRequested(session, toolCall));
 
                     string toolResult;
                     try
                     {
-                        toolResult = await agent.Toolkit.ExecuteAsync(
+                        toolResult = await session.Toolkit.ExecuteAsync(
                             toolCall.Name!,
                             toolCall.Arguments ?? "{}");
                     }
@@ -93,7 +92,7 @@ namespace Agent
                     {
                         toolResult = $"Tool error: {ex.Message}";
                     }
-                    EventTraces.Publish(new ToolCallCompleted(agent, toolCall, toolResult));
+                    EventTraces.Publish(new ToolCallCompleted(session, toolCall, toolResult));
 
                     nextInputMessage = new FunctionCallOutputMessage
                     {
@@ -103,7 +102,7 @@ namespace Agent
                 }
             }
 
-            throw new InvalidOperationException($"Agent loop exceeded max iterations ({_maxIterations}).");
+            throw new InvalidOperationException($"Harness loop exceeded max iterations ({_maxIterations}).");
         }
     }
 }

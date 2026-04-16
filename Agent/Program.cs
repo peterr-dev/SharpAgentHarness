@@ -1,6 +1,6 @@
-using Agent.Tools;
-using Agent.Llm;
 using System.Text.Json.Serialization;
+using Core;
+using Tools;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,7 +14,7 @@ var app = builder.Build();
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 
-// Default agent configuration
+// Default session configuration
 const string DefaultModel = "gpt-5-nano";
 const string DefaultInstructions = "You are a helpful assistant.";
 const string DefaultPromptCacheKey = "SharpAgentHarness";
@@ -32,12 +32,12 @@ app.MapGet("/api", () =>
     return Results.Ok("Hello from the SharpAgentHarness API!");
 });
 
-// Create a new agent and return its ID
-app.MapPost("/api/agents", (CreateAgentRequest? body) =>
+// Create a new session and return its ID
+app.MapPost("/api/sessions", (CreateSessionRequest? body) =>
 {
     try
     {
-        Agent agent = new Agent(
+        Session session = new Session(
             model: body?.Model ?? DefaultModel,
             instructions: body?.Instructions ?? DefaultInstructions,
             promptCacheKey: body?.PromptCacheKey ?? DefaultPromptCacheKey,
@@ -45,8 +45,8 @@ app.MapPost("/api/agents", (CreateAgentRequest? body) =>
             reasoning: body?.Reasoning ?? DefaultReasoning,
             verbosity: body?.Verbosity ?? DefaultVerbosity,
             toolkit: Toolkits.Get(body?.Toolkit ?? DefaultToolkit));
-        Agents.Add(agent);
-        return Results.Ok(agent);
+        Sessions.Add(session);
+        return Results.Ok(session);
     }
     catch (KeyNotFoundException ex)
     {
@@ -58,13 +58,13 @@ app.MapPost("/api/agents", (CreateAgentRequest? body) =>
     }
 });
 
-// Get agent details
-app.MapGet("/api/agents/{agentId}", (Guid agentId) =>
+// Get session details
+app.MapGet("/api/sessions/{sessionId}", (Guid sessionId) =>
 {
     try
     {
-        Agent agent = Agents.GetAgent(agentId);
-        return Results.Ok(agent);
+        Session session = Sessions.GetSession(sessionId);
+        return Results.Ok(session);
     }
     catch (KeyNotFoundException ex)
     {
@@ -77,15 +77,15 @@ app.MapGet("/api/agents/{agentId}", (Guid agentId) =>
 });
 
 
-// Get all recorded events for an agent
-app.MapGet("/api/agents/{agentId}/events", (Guid agentId) =>
+// Get all recorded events for a session
+app.MapGet("/api/sessions/{sessionId}/events", (Guid sessionId) =>
 {
     try
     {
-        // Ensure the agent exists before returning events.
-        Agents.GetAgent(agentId);
+        // Ensure the session exists before returning events.
+        Sessions.GetSession(sessionId);
 
-        IReadOnlyList<IAgentEvent> events = EventTraces.GetEventsForAgent(agentId);
+        IReadOnlyList<ISessionEvent> events = EventTraces.GetEventsForSession(sessionId);
 
         // Return a consistent, explicit event shape so the response is easy to consume.
         List<EventResponseItem> eventResponse = events
@@ -93,42 +93,42 @@ app.MapGet("/api/agents/{agentId}/events", (Guid agentId) =>
             {
                 TurnStarted turnStarted => new EventResponseItem(
                     EventType: nameof(TurnStarted),
-                    AgentId: turnStarted.Agent.Id,
+                    SessionId: turnStarted.Session.Id,
                     Details: new
                     {
-                        agent = turnStarted.Agent
+                        session = turnStarted.Session
                     }),
                 LlmRawRequestSent rawRequest => new EventResponseItem(
                     EventType: nameof(LlmRawRequestSent),
-                    AgentId: rawRequest.Agent.Id,
+                    SessionId: rawRequest.Session.Id,
                     Details: new
                     {
                         requestBody = rawRequest.RequestBody
                     }),
                 LlmRequestSent requestSent => new EventResponseItem(
                     EventType: nameof(LlmRequestSent),
-                    AgentId: requestSent.Agent.Id,
+                    SessionId: requestSent.Session.Id,
                     Details: new
                     {
                         request = requestSent.req
                     }),
                 LlmResponseReceived responseReceived => new EventResponseItem(
                     EventType: nameof(LlmResponseReceived),
-                    AgentId: responseReceived.Agent.Id,
+                    SessionId: responseReceived.Session.Id,
                     Details: new
                     {
                         response = responseReceived.resp
                     }),
                 ToolCallRequested toolCallRequested => new EventResponseItem(
                     EventType: nameof(ToolCallRequested),
-                    AgentId: toolCallRequested.Agent.Id,
+                    SessionId: toolCallRequested.Session.Id,
                     Details: new
                     {
                         toolCall = toolCallRequested.toolCall
                     }),
                 ToolCallCompleted toolCallCompleted => new EventResponseItem(
                     EventType: nameof(ToolCallCompleted),
-                    AgentId: toolCallCompleted.Agent.Id,
+                    SessionId: toolCallCompleted.Session.Id,
                     Details: new
                     {
                         toolCall = toolCallCompleted.toolCall,
@@ -136,14 +136,14 @@ app.MapGet("/api/agents/{agentId}/events", (Guid agentId) =>
                     }),
                 TurnCompleted turnCompleted => new EventResponseItem(
                     EventType: nameof(TurnCompleted),
-                    AgentId: turnCompleted.Agent.Id,
+                    SessionId: turnCompleted.Session.Id,
                     Details: new
                     {
-                        agent = turnCompleted.Agent
+                        session = turnCompleted.Session
                     }),
                 _ => new EventResponseItem(
                     EventType: evt.GetType().Name,
-                    AgentId: evt.Agent.Id,
+                    SessionId: evt.Session.Id,
                     Details: evt)
             })
             .ToList();
@@ -160,12 +160,12 @@ app.MapGet("/api/agents/{agentId}/events", (Guid agentId) =>
     }
 });
 
-// Send a message within an agent
-app.MapPost("/api/agents/{agentId}/messages", async (Guid agentId, SendMessageRequest body) =>
+// Send a message within a session
+app.MapPost("/api/sessions/{sessionId}/messages", async (Guid sessionId, SendMessageRequest body) =>
 {
     try
     {
-        string response = await Agent.HandleMessageAsync(agentId, body.message);
+        string response = await Session.HandleMessageAsync(sessionId, body.message);
         return Results.Ok(new { response });
     }
     catch (KeyNotFoundException ex)
@@ -180,7 +180,7 @@ app.MapPost("/api/agents/{agentId}/messages", async (Guid agentId, SendMessageRe
 
 app.Run();
 
-record CreateAgentRequest(
+record CreateSessionRequest(
     string? Model,
     string? Instructions,
     string? PromptCacheKey,
@@ -191,4 +191,4 @@ record CreateAgentRequest(
 
 record SendMessageRequest(string message);
 
-record EventResponseItem(string EventType, Guid AgentId, object Details);
+record EventResponseItem(string EventType, Guid SessionId, object Details);
