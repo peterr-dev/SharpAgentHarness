@@ -70,7 +70,7 @@ public class HarnessTests
 
     private void AssertRawRequestsLookCacheable(Session session, IReadOnlyList<string> responseIds)
     {
-        var rawRequestEvents = EventTraces.GetEventsForSession<LlmRawRequestSent>(session);
+        var rawRequestEvents = EventTraces.GetEventsForSession<RawLlmRequestReady>(session);
 
         Assert.NotEmpty(rawRequestEvents);
         Assert.True(
@@ -78,7 +78,7 @@ public class HarnessTests
             $"Expected {responseIds.Count} raw request events, but found {rawRequestEvents.Count}.");
 
         List<RawRequestSnapshot> snapshots = rawRequestEvents
-            .Select(rawRequestEvent => ParseRawRequestSnapshot(rawRequestEvent.RequestBody))
+            .Select(rawRequestEvent => ParseRawRequestSnapshot(rawRequestEvent.requestBody))
             .ToList();
 
         var baseline = snapshots[0];

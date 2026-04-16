@@ -2,12 +2,12 @@
 
 A minimal, general-purpose agent harness written in C#/.NET, providing a foundation for experimenting with the development of agents for business use.
 
-## What’s included
+## What’s Included
 
-- A typed wrapper around a pragmatic subset of the OpenAI Responses API.
-- A REST API for creating agent harness sessions, sending messages, and inspecting sessions and event traces.
-- Function tools organised into named toolkits.
+- A REST API for interacting with the agent harness.
+- Support for function tools organised into named toolkits.
 - Event tracing for visibility of session activity.
+- A typed wrapper around a pragmatic subset of the OpenAI Responses API.
 - A lightweight Web UI for interacting with the agent harness API.
 
 ## Project Structure
@@ -18,9 +18,10 @@ A minimal, general-purpose agent harness written in C#/.NET, providing a foundat
 ## Architecture
 
 - `Session` - manages the state of a single conversation with the agent harness.
-- `Sessions` - in-memory store for active sessions.
 - `Turn` - orchestrates a single turn within a `Session`, starting from a user message, handling any resulting tool calls and tool results, and returning the final output message.
-- `LlmRequest` and `LlmResponse` - model a strongly typed, pragmatic subset of the OpenAI Responses API.
+- `Hook` - called at key points in the `Turn` lifecycle, enabling observation, mutation or abandonment of agent activities.
+- `Event` - models session-scoped events used for tracing turn execution, LLM requests and responses, and tool activity.
+- `Llm` - wraps communication with the OpenAI Responses API in terms of `LlmRequest` and `LlmResponse`, which model a strongly typed, pragmatic subset of the OpenAI Responses API.
 
 The repo also contains a `Tests` project with a small set of integration-style tests for verifying specific behaviours of the harness, such as prompt caching.  
 

@@ -20,7 +20,7 @@ namespace Core
             if (string.IsNullOrWhiteSpace(userMessage)) throw new ArgumentNullException(nameof(userMessage));
             Message nextInputMessage = new EasyInputMessage { Content = userMessage };
 
-            EventTraces.Publish(new TurnStarted(session));
+            HookRegistry.RunTurnStartedHooks(session);
 
             for (var iteration = 0; iteration < _maxIterations; iteration++)
             {
@@ -37,7 +37,7 @@ namespace Core
                     InputMessage = nextInputMessage
                 };
 
-                EventTraces.Publish(new LlmRequestSent(session, req));
+                HookRegistry.RunLlmRequestReadyHooks(session, req);
                 var response = await _llmClient.SendMessageAsync(session, req, cancellationToken);
 
                 if (response is ErrorResponse error)
@@ -54,7 +54,7 @@ namespace Core
                         !string.IsNullOrWhiteSpace(toolCall.CallId) &&
                         !string.IsNullOrWhiteSpace(toolCall.Name))
                     .ToList();
-                EventTraces.Publish(new LlmResponseReceived(session, response));
+                HookRegistry.RunLlmResponseReceivedHooks(session, response);
 
                 if (toolCalls.Count == 0)
                 {
@@ -65,7 +65,7 @@ namespace Core
                         .SelectMany(message => message.Content.OfType<ResponseContentPartText>())
                         .Select(content => content.Text)
                         .Where(text => !string.IsNullOrWhiteSpace(text)));
-                    EventTraces.Publish(new TurnCompleted(session));
+                    HookRegistry.RunTurnCompletedHooks(session);
                     return finalAnswer;
                 }
                 else if (toolCalls.Count > 1)
@@ -75,7 +75,7 @@ namespace Core
                 else
                 {
                     ResponseOutputItemFunctionCall toolCall = toolCalls.First();
-                    EventTraces.Publish(new ToolCallRequested(session, toolCall));
+                    HookRegistry.RunToolCallRequestedHooks(session, toolCall);
 
                     string toolResult;
                     try
@@ -92,7 +92,7 @@ namespace Core
                     {
                         toolResult = $"Tool error: {ex.Message}";
                     }
-                    EventTraces.Publish(new ToolCallCompleted(session, toolCall, toolResult));
+                    HookRegistry.RunToolCallCompletedHooks(session, toolCall, toolResult);
 
                     nextInputMessage = new FunctionCallOutputMessage
                     {

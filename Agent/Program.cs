@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Core;
 using Tools;
+using Hooks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,7 +15,7 @@ var app = builder.Build();
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 
-// Default session configuration
+// Default session configuration.
 const string DefaultModel = "gpt-5-nano";
 const string DefaultInstructions = "You are a helpful assistant.";
 const string DefaultPromptCacheKey = "SharpAgentHarness";
@@ -23,9 +24,13 @@ const ReasoningEffort DefaultReasoning = ReasoningEffort.Low;
 const TextVerbosity DefaultVerbosity = TextVerbosity.Low;
 const string DefaultToolkit = "Default";
 
+// Create a toolkit and add custom tools to it.
 var defaultToolkit = new Toolkit(DefaultToolkit);
 defaultToolkit.Add(new GetCurrentTimeTool());
 Toolkits.Add(defaultToolkit);
+
+// Register custom hooks.
+HookRegistry.Register(new EnsureCurrentTimeZoneHook());
 
 app.MapGet("/api", () =>
 {
@@ -45,7 +50,7 @@ app.MapPost("/api/sessions", (CreateSessionRequest? body) =>
             reasoning: body?.Reasoning ?? DefaultReasoning,
             verbosity: body?.Verbosity ?? DefaultVerbosity,
             toolkit: Toolkits.Get(body?.Toolkit ?? DefaultToolkit));
-        Sessions.Add(session);
+        SessionRegistry.Add(session);
         return Results.Ok(session);
     }
     catch (KeyNotFoundException ex)
@@ -63,7 +68,7 @@ app.MapGet("/api/sessions/{sessionId}", (Guid sessionId) =>
 {
     try
     {
-        Session session = Sessions.GetSession(sessionId);
+        Session session = SessionRegistry.GetSession(sessionId);
         return Results.Ok(session);
     }
     catch (KeyNotFoundException ex)
@@ -83,7 +88,7 @@ app.MapGet("/api/sessions/{sessionId}/events", (Guid sessionId) =>
     try
     {
         // Ensure the session exists before returning events.
-        Sessions.GetSession(sessionId);
+        SessionRegistry.GetSession(sessionId);
 
         IReadOnlyList<ISessionEvent> events = EventTraces.GetEventsForSession(sessionId);
 
@@ -94,19 +99,9 @@ app.MapGet("/api/sessions/{sessionId}/events", (Guid sessionId) =>
                 TurnStarted turnStarted => new EventResponseItem(
                     EventType: nameof(TurnStarted),
                     SessionId: turnStarted.Session.Id,
-                    Details: new
-                    {
-                        session = turnStarted.Session
-                    }),
-                LlmRawRequestSent rawRequest => new EventResponseItem(
-                    EventType: nameof(LlmRawRequestSent),
-                    SessionId: rawRequest.Session.Id,
-                    Details: new
-                    {
-                        requestBody = rawRequest.RequestBody
-                    }),
-                LlmRequestSent requestSent => new EventResponseItem(
-                    EventType: nameof(LlmRequestSent),
+                    Details: new { }),
+                LlmRequestReady requestSent => new EventResponseItem(
+                    EventType: nameof(LlmRequestReady),
                     SessionId: requestSent.Session.Id,
                     Details: new
                     {
@@ -118,6 +113,13 @@ app.MapGet("/api/sessions/{sessionId}/events", (Guid sessionId) =>
                     Details: new
                     {
                         response = responseReceived.resp
+                    }),
+                RawLlmRequestReady rawRequest => new EventResponseItem(
+                    EventType: nameof(RawLlmRequestReady),
+                    SessionId: rawRequest.Session.Id,
+                    Details: new
+                    {
+                        requestBody = rawRequest.requestBody
                     }),
                 ToolCallRequested toolCallRequested => new EventResponseItem(
                     EventType: nameof(ToolCallRequested),
@@ -137,14 +139,8 @@ app.MapGet("/api/sessions/{sessionId}/events", (Guid sessionId) =>
                 TurnCompleted turnCompleted => new EventResponseItem(
                     EventType: nameof(TurnCompleted),
                     SessionId: turnCompleted.Session.Id,
-                    Details: new
-                    {
-                        session = turnCompleted.Session
-                    }),
-                _ => new EventResponseItem(
-                    EventType: evt.GetType().Name,
-                    SessionId: evt.Session.Id,
-                    Details: evt)
+                    Details: new { }),
+                _ => throw new Exception($"Unhandled event type: {evt.GetType().Name}")
             })
             .ToList();
 

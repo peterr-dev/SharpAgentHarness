@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Core.Llm;
 
 namespace Core
@@ -7,37 +8,37 @@ namespace Core
         Session Session { get; }
     }
 
-    public sealed record TurnStarted(Session session) : ISessionEvent
+    public sealed record TurnStarted([property: JsonIgnore] Session session) : ISessionEvent
     {
         public Session Session => session;
     }
 
-    public sealed record LlmRequestSent(Session session, Request req) : ISessionEvent
+    public sealed record LlmRequestReady([property: JsonIgnore] Session session, Request req) : ISessionEvent
     {
         public Session Session => session;
     }
 
-    public sealed record LlmResponseReceived(Session session, Response resp) : ISessionEvent
+    public sealed record RawLlmRequestReady([property: JsonIgnore] Session session, [property: JsonIgnore] HttpRequestMessage req, string requestBody) : ISessionEvent
     {
         public Session Session => session;
     }
 
-    public sealed record ToolCallRequested(Session session, ResponseOutputItemFunctionCall toolCall) : ISessionEvent
+    public sealed record LlmResponseReceived([property: JsonIgnore] Session session, Response resp) : ISessionEvent
     {
         public Session Session => session;
     }
 
-    public sealed record ToolCallCompleted(Session session, ResponseOutputItemFunctionCall toolCall, string resultText) : ISessionEvent
+    public sealed record ToolCallRequested([property: JsonIgnore] Session session, ResponseOutputItemFunctionCall toolCall) : ISessionEvent
     {
         public Session Session => session;
     }
 
-    public sealed record TurnCompleted(Session session) : ISessionEvent
+    public sealed record ToolCallCompleted([property: JsonIgnore] Session session, ResponseOutputItemFunctionCall toolCall, string resultText) : ISessionEvent
     {
         public Session Session => session;
     }
 
-    public sealed record LlmRawRequestSent(Session session, string RequestBody) : ISessionEvent
+    public sealed record TurnCompleted([property: JsonIgnore] Session session) : ISessionEvent
     {
         public Session Session => session;
     }

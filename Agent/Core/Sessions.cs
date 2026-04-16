@@ -35,7 +35,7 @@ namespace Core
         High
     }
 
-    public static class Sessions
+    public static class SessionRegistry
     {
         private static readonly ConcurrentDictionary<Guid, Session> _sessions = new();
 
@@ -128,7 +128,7 @@ namespace Core
             if (string.IsNullOrWhiteSpace(userMessage))
                 throw new ArgumentException("User message is required.", nameof(userMessage));
 
-            var session = Sessions.GetSession(sessionId);
+            var session = SessionRegistry.GetSession(sessionId);
             string response = await session.SendMessage(userMessage);
             return response;
         }

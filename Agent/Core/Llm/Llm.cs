@@ -22,17 +22,17 @@ namespace Core.Llm
 
         private async Task<Response> SendMessageCoreAsync(Session? session, Request req, CancellationToken cancellationToken)
         {
+            if (session is null) throw new ArgumentNullException(nameof(session));
+            if (req is null) throw new ArgumentNullException(nameof(req));
+
             using var httpReq = new HttpRequestMessage(HttpMethod.Post, OpenAiResponsesUrl);
 
             string apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? throw new InvalidOperationException("Environment variable 'OPENAI_API_KEY' is not set.");
+            
             httpReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
             string reqBody = req.ToOpenAiResponsesBody();
-            if (session is not null)
-            {
-                EventTraces.Publish(new LlmRawRequestSent(session, reqBody));
-            }
-
             httpReq.Content = new StringContent(reqBody, Encoding.UTF8, "application/json");
+            HookRegistry.RunLlmRawRequestReadyHooks(session, httpReq, reqBody);
 
             using var response = await Http.SendAsync(httpReq, cancellationToken);
             string responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
