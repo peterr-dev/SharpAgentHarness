@@ -1,47 +1,125 @@
 using System.Collections.Concurrent;
-using System.Text.Json.Serialization;
-using Core.Llm;
+using Core.ChatCompletions;
 
 namespace Core
 {
-    // Serialise enum values as readable strings in API responses.
-    [JsonConverter(typeof(JsonStringEnumConverter))]
-    public enum ServiceTier
+    public class Session
     {
-        Auto,
-        Default,
-        Flex,
-        Priority
+        private const int DefaultMaxTurnIterations = 5;
+        private readonly List<ChatCompletionMessageParam> _messages = new();
+        private readonly object _messagesLock = new();
+        private readonly object _usageLock = new();
+        private readonly SemaphoreSlim _turnSemaphore = new(1, 1);
+
+        public Session() : this(new ApiClient())
+        {
+        }
+
+        public Session(ApiClient apiClient)
+        {
+            ApiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
+            _turn = new Turn(ApiClient, DefaultMaxTurnIterations);
+        }
+
+        public Guid Id { get; } = Guid.NewGuid();
+
+        public Uri ChatCompletionsUrl { get; init; } = new Uri("https://api.openai.com/v1/chat/completions");
+
+        public required string Model { get; init; }
+
+        public required string PromptCacheKey { get; init; }
+
+        public ApiClient ApiClient { get; }
+
+        private readonly Turn _turn;
+
+        public Task<ChatCompletionMessage> RunTurnAsync(ChatCompletionMessageParam message, CancellationToken cancellationToken)
+        {
+            return _turn.RunTurnAsync(this, message, cancellationToken);
+        }
+
+        public Request CreateRequest(IEnumerable<ChatCompletionMessageParam> messages)
+        {
+            if (messages is null) throw new ArgumentNullException(nameof(messages));
+
+            Request request = new Request(this);
+            request.Messages.AddRange(messages);
+            return request;
+        }
+
+        // Return a copy so callers can safely enumerate without observing concurrent mutations.
+        public List<ChatCompletionMessageParam> Messages
+        {
+            get
+            {
+                lock (_messagesLock)
+                {
+                    return new List<ChatCompletionMessageParam>(_messages);
+                }
+            }
+        }
+
+        public void AddMessage(ChatCompletionMessageParam message)
+        {
+            lock (_messagesLock)
+            {
+                _messages.Add(message);
+            }
+        }
+
+        // Usage totals are cumulative across all model calls in the session.
+        public int TotalInputTokens { get; private set; }
+
+        public int TotalCachedInputTokens { get; private set; }
+
+        public int TotalOutputTokens { get; private set; }
+
+        public int TotalReasoningOutputTokens { get; private set; }
+
+        public void AddUsage(ChatCompletionUsage usage)
+        {
+            if (usage is null) throw new ArgumentNullException(nameof(usage));
+
+            lock (_usageLock)
+            {
+                TotalInputTokens += usage.InputTokens;
+                TotalCachedInputTokens += usage.CachedInputTokens;
+                TotalOutputTokens += usage.OutputTokens;
+                TotalReasoningOutputTokens += usage.ReasoningOutputTokens;
+            }
+        }
+
+        public Task WaitForTurnAsync(CancellationToken cancellationToken)
+        {
+            return _turnSemaphore.WaitAsync(cancellationToken);
+        }
+
+        public void ReleaseTurn()
+        {
+            _turnSemaphore.Release();
+        }
+
+        public required ReasoningEffort ReasoningEffort { get; init; }
+
+        public required Verbosity Verbosity { get; init; }
+
+        public required ServiceTier ServiceTier { get; init; }
+
+        public Toolkit? Toolkit { get; init;}
+
+        public double? Temperature { get; init; }
+
+        public int? MaxCompletionTokens { get; init; }
     }
 
-    // Serialise enum values as readable strings in API responses.
-    [JsonConverter(typeof(JsonStringEnumConverter))]
-    public enum ReasoningEffort
-    {
-        None,
-        Minimal,
-        Low,
-        Medium,
-        High,
-        XHigh
-    }
-
-    // Serialise enum values as readable strings in API responses.
-    [JsonConverter(typeof(JsonStringEnumConverter))]
-    public enum TextVerbosity
-    {
-        Low,
-        Medium,
-        High
-    }
-
-    public static class SessionRegistry
+    public static class Sessions
     {
         private static readonly ConcurrentDictionary<Guid, Session> _sessions = new();
 
-        public static void Add(Session session)
+        public static Session CreateSession(Session session)
         {
             _sessions[session.Id] = session;
+            return session;
         }
 
         public static Session GetSession(Guid sessionId)
@@ -55,121 +133,6 @@ namespace Core
         public static bool Remove(Guid sessionId)
         {
             return _sessions.TryRemove(sessionId, out _);
-        }
-
-        public static void Clear()
-        {
-            _sessions.Clear();
-        }
-    }
-
-    public class Session
-    {
-        public Guid Id { get; } = Guid.NewGuid();
-
-        public string Model { get; init; }
-
-        public ServiceTier Tier { get; init; }
-
-        public string PromptCacheKey { get; init; }
-
-        public ReasoningEffort Reasoning { get; init; }
-
-        public TextVerbosity Verbosity { get; init; }
-
-        /// <summary>
-        /// Populated from turn two onwards
-        /// </summary>
-        public string? PreviousResponseId { get; set; }
-
-        /// <summary>
-        /// Equivalent to a System Prompt
-        /// </summary>
-        public string Instructions { get; init; }
-
-        public string ToolkitName { get; init; }
-
-        /// <summary>
-        /// Running token usage totals accumulated across all successful LLM responses in this session.
-        /// </summary>
-        public SessionUsageTotals UsageTotals { get; } = new();
-
-        [JsonIgnore]
-        public Toolkit Toolkit { get; }
-
-        private readonly Turn _turn;
-
-        public Session(string model, string instructions, string promptCacheKey, ServiceTier tier, ReasoningEffort reasoning, TextVerbosity verbosity, Toolkit toolkit, int maxIterations = 5)
-        {
-            if (toolkit is null) throw new ArgumentNullException(nameof(toolkit));
-
-            Model = model;
-            Instructions = instructions;
-            PromptCacheKey = promptCacheKey;
-            Tier = tier;
-            Reasoning = reasoning;
-            Verbosity = verbosity;
-            ToolkitName = toolkit.Name;
-            Toolkit = toolkit;
-            _turn = new Turn(maxIterations);
-        }
-
-        public async Task<string> SendMessage(string userMessage)
-        {
-            string result = await _turn.RunTurnAsync(this, userMessage);
-            return result;
-        }
-
-        /// <summary>
-        /// Send an incoming user message for a session turn.
-        /// </summary>
-        public static async Task<string> HandleMessageAsync(Guid sessionId, string userMessage)
-        {
-            if (string.IsNullOrWhiteSpace(userMessage))
-                throw new ArgumentException("User message is required.", nameof(userMessage));
-
-            var session = SessionRegistry.GetSession(sessionId);
-            string response = await session.SendMessage(userMessage);
-            return response;
-        }
-    }
-
-    public class SessionUsageTotals
-    {
-        /// <summary>
-        /// Total input tokens across all responses in the session.
-        /// </summary>
-        public int InputTokens { get; private set; }
-
-        /// <summary>
-        /// Total cached input tokens across all responses in the session.
-        /// </summary>
-        public int CachedInputTokens { get; private set; }
-
-        /// <summary>
-        /// Total output tokens across all responses in the session.
-        /// </summary>
-        public int OutputTokens { get; private set; }
-
-        /// <summary>
-        /// Total reasoning output tokens across all responses in the session.
-        /// </summary>
-        public int ReasoningOutputTokens { get; private set; }
-
-        /// <summary>
-        /// Adds a response usage snapshot into the running totals.
-        /// </summary>
-        public void Add(ResponseUsage? usage)
-        {
-            if (usage is null)
-            {
-                return;
-            }
-
-            InputTokens += usage.InputTokens ?? 0;
-            CachedInputTokens += usage.CachedInputTokens ?? 0;
-            OutputTokens += usage.OutputTokens ?? 0;
-            ReasoningOutputTokens += usage.ReasoningOutputTokens ?? 0;
         }
     }
 }

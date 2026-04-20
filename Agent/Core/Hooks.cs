@@ -1,4 +1,4 @@
-using Core.Llm;
+using Core.ChatCompletions;
 
 namespace Core
 {
@@ -12,50 +12,21 @@ namespace Core
         }
     }
 
-    public abstract class LlmRequestReadyHook : Hook
+    public abstract class RequestReadyHook : Hook
     {
-        public virtual void OnLlmRequestReady(Session session, Request req)
+        public virtual void OnRequestReady(Session session, Request request)
         {
             if (session == null) throw new ArgumentNullException(nameof(session));
-            if (req == null) throw new ArgumentNullException(nameof(req));
+            if (request == null) throw new ArgumentNullException(nameof(request));
         }
     }
 
-    public abstract class RawLlmRequestReadyHook : Hook
+    public abstract class ResponseReceivedHook : Hook
     {
-        public virtual void OnRawLlmRequestReady(Session session, HttpRequestMessage req, string requestBody)
+        public virtual void OnResponseReceived(Session session, Response response)
         {
             if (session == null) throw new ArgumentNullException(nameof(session));
-            if (req == null) throw new ArgumentNullException(nameof(req));
-            if (requestBody == null) throw new ArgumentNullException(nameof(requestBody));
-        }
-    }
-
-    public abstract class LlmResponseReceivedHook : Hook
-    {
-        public virtual void OnLlmResponseReceived(Session session, Response resp)
-        {
-            if (session == null) throw new ArgumentNullException(nameof(session));
-            if (resp == null) throw new ArgumentNullException(nameof(resp));
-        }
-    }
-
-    public abstract class ToolCallRequestedHook : Hook
-    {
-        public virtual void OnToolCallRequested(Session session, ResponseOutputItemFunctionCall toolCall)
-        {
-            if (session == null) throw new ArgumentNullException(nameof(session));
-            if (toolCall == null || string.IsNullOrEmpty(toolCall.Id) || string.IsNullOrEmpty(toolCall.Name)) throw new ArgumentNullException(nameof(toolCall));
-         }
-    }
-
-    public abstract class ToolCallCompletedHook : Hook
-    {
-        public virtual void OnToolCallCompleted(Session session, ResponseOutputItemFunctionCall toolCall, string resultText)
-        {
-            if (session == null) throw new ArgumentNullException(nameof(session));
-            if (toolCall == null) throw new ArgumentNullException(nameof(toolCall));
-            if (resultText == null) throw new ArgumentNullException(nameof(resultText));
+            if (response == null) throw new ArgumentNullException(nameof(response));
         }
     }
 
@@ -67,57 +38,48 @@ namespace Core
         }
     }
 
+    public abstract class RawRequestReadyHook : Hook
+    {
+        public virtual void OnRawRequestReady(Session session, string rawRequest)
+        {
+            if (session == null) throw new ArgumentNullException(nameof(session));
+            if (rawRequest == null) throw new ArgumentNullException(nameof(rawRequest));
+        }
+    }
+
+    public abstract class RawResponseReceivedHook : Hook
+    {
+        public virtual void OnRawResponseReceived(Session session, string rawResponse)
+        {
+            if (session == null) throw new ArgumentNullException(nameof(session));
+            if (rawResponse == null) throw new ArgumentNullException(nameof(rawResponse));
+        }
+    }
+
     public class LogEventTurnStartedHook : TurnStartedHook
     {
         public override void OnTurnStarted(Session session)
         {
             base.OnTurnStarted(session);
-            EventTraces.Publish(new TurnStarted(session));
+            Events.Publish(new TurnStarted(session));
         }
     }
 
-    public class LogEventLlmRequestReadyHook : LlmRequestReadyHook
+    public class LogEventRequestReadyHook : RequestReadyHook
     {
-        public override void OnLlmRequestReady(Session session, Request req)
+        public override void OnRequestReady(Session session, Request request)
         {
-            base.OnLlmRequestReady(session, req);
-            EventTraces.Publish(new LlmRequestReady(session, req));
+            base.OnRequestReady(session, request);
+            Events.Publish(new RequestReady(session, request));
         }
     }
 
-    public class LogEventRawLlmRequestReadyHook : RawLlmRequestReadyHook
+    public class LogEventResponseReceivedHook : ResponseReceivedHook
     {
-        public override void OnRawLlmRequestReady(Session session, HttpRequestMessage req, string requestBody)
+        public override void OnResponseReceived(Session session, Response response)
         {
-            base.OnRawLlmRequestReady(session, req, requestBody);
-            EventTraces.Publish(new RawLlmRequestReady(session, req, requestBody));
-        }
-    }
-
-    public class LogEventLlmResponseReceivedHook : LlmResponseReceivedHook
-    {
-        public override void OnLlmResponseReceived(Session session, Response resp)
-        {
-            base.OnLlmResponseReceived(session, resp);
-            EventTraces.Publish(new LlmResponseReceived(session, resp));
-        }
-    }
-
-    public class LogEventToolCallRequestedHook : ToolCallRequestedHook
-    {
-        public override void OnToolCallRequested(Session session, ResponseOutputItemFunctionCall toolCall)
-        {
-            base.OnToolCallRequested(session, toolCall);
-            EventTraces.Publish(new ToolCallRequested(session, toolCall));
-        }
-    }
-
-    public class LogEventToolCallCompletedHook : ToolCallCompletedHook
-    {
-        public override void OnToolCallCompleted(Session session, ResponseOutputItemFunctionCall toolCall, string resultText)
-        {
-            base.OnToolCallCompleted(session, toolCall, resultText);
-            EventTraces.Publish(new ToolCallCompleted(session, toolCall, resultText));
+            base.OnResponseReceived(session, response);
+            Events.Publish(new ResponseReceived(session, response));
         }
     }
 
@@ -126,7 +88,25 @@ namespace Core
         public override void OnTurnCompleted(Session session)
         {
             base.OnTurnCompleted(session);
-            EventTraces.Publish(new TurnCompleted(session));
+            Events.Publish(new TurnCompleted(session));
+        }
+    }
+
+    public class LogEventRawRequestReadyHook : RawRequestReadyHook
+    {
+        public override void OnRawRequestReady(Session session, string rawRequest)
+        {
+            base.OnRawRequestReady(session, rawRequest);
+            Events.Publish(new RawRequestReady(session, rawRequest));
+        }
+    }
+
+    public class LogEventRawResponseReceivedHook : RawResponseReceivedHook
+    {
+        public override void OnRawResponseReceived(Session session, string rawResponse)
+        {
+            base.OnRawResponseReceived(session, rawResponse);
+            Events.Publish(new RawResponseReceived(session, rawResponse));
         }
     }
 
@@ -135,51 +115,55 @@ namespace Core
     public static class HookRegistry
     {
         private static readonly List<Hook> _hooks = new();
+        private static readonly object _hooksLock = new();
 
         // Registers one instance of each LogEvent* hook so that all lifecycle
         // events for a Session are always recorded.
         static HookRegistry()
         {
             _hooks.Add(new LogEventTurnStartedHook());
-            _hooks.Add(new LogEventLlmRequestReadyHook());
-            _hooks.Add(new LogEventRawLlmRequestReadyHook());
-            _hooks.Add(new LogEventLlmResponseReceivedHook());
-            _hooks.Add(new LogEventToolCallRequestedHook());
-            _hooks.Add(new LogEventToolCallCompletedHook());
+            _hooks.Add(new LogEventRequestReadyHook());
+            _hooks.Add(new LogEventResponseReceivedHook());
             _hooks.Add(new LogEventTurnCompletedHook());
+            _hooks.Add(new LogEventRawRequestReadyHook());
+            _hooks.Add(new LogEventRawResponseReceivedHook());
         }
 
         public static void Register(Hook hook)
         {
             if (hook == null) throw new ArgumentNullException(nameof(hook));
-            _hooks.Add(hook);
+            lock (_hooksLock)
+            {
+                _hooks.Add(hook);
+            }
         }
 
-        // Returns all registered hooks that are assignable to type T.
-        public static IEnumerable<T> GetAll<T>() where T : Hook
+        // Returns a snapshot of hooks assignable to T so callers can safely iterate
+        // while other threads register additional hooks.
+        public static IReadOnlyList<T> GetAll<T>() where T : Hook
         {
-            return _hooks.OfType<T>();
+            lock (_hooksLock)
+            {
+                return _hooks.OfType<T>().ToList();
+            }
         }
 
         public static void RunTurnStartedHooks(Session session)
             => GetAll<TurnStartedHook>().ToList().ForEach(h => h.OnTurnStarted(session));
 
-        public static void RunLlmRequestReadyHooks(Session session, Request req)
-            => GetAll<LlmRequestReadyHook>().ToList().ForEach(h => h.OnLlmRequestReady(session, req));
+        public static void RunRequestReadyHooks(Session session, Request request)
+            => GetAll<RequestReadyHook>().ToList().ForEach(h => h.OnRequestReady(session, request));
 
-        public static void RunLlmRawRequestReadyHooks(Session session, HttpRequestMessage req, string requestBody)
-            => GetAll<RawLlmRequestReadyHook>().ToList().ForEach(h => h.OnRawLlmRequestReady(session, req, requestBody));
-
-        public static void RunLlmResponseReceivedHooks(Session session, Response resp)
-            => GetAll<LlmResponseReceivedHook>().ToList().ForEach(h => h.OnLlmResponseReceived(session, resp));
-
-        public static void RunToolCallRequestedHooks(Session session, ResponseOutputItemFunctionCall toolCall)
-            => GetAll<ToolCallRequestedHook>().ToList().ForEach(h => h.OnToolCallRequested(session, toolCall));
-
-        public static void RunToolCallCompletedHooks(Session session, ResponseOutputItemFunctionCall toolCall, string resultText)
-            => GetAll<ToolCallCompletedHook>().ToList().ForEach(h => h.OnToolCallCompleted(session, toolCall, resultText));
+        public static void RunResponseReceivedHooks(Session session, Response response)
+            => GetAll<ResponseReceivedHook>().ToList().ForEach(h => h.OnResponseReceived(session, response));
 
         public static void RunTurnCompletedHooks(Session session)
             => GetAll<TurnCompletedHook>().ToList().ForEach(h => h.OnTurnCompleted(session));
+
+        public static void RunRawRequestReadyHooks(Session session, string rawRequest)
+            => GetAll<RawRequestReadyHook>().ToList().ForEach(h => h.OnRawRequestReady(session, rawRequest));
+
+        public static void RunRawResponseReceivedHooks(Session session, string rawResponse)
+            => GetAll<RawResponseReceivedHook>().ToList().ForEach(h => h.OnRawResponseReceived(session, rawResponse));
     }
 }

@@ -1,558 +1,516 @@
-using System.Text.Json;
-using Xunit.Abstractions;
+using System.Text.Json.Nodes;
 using Core;
-using Core.Llm;
-using Tools;
+using Core.ChatCompletions;
+using System.Linq;
 
 namespace Tests;
 
 public class HarnessTests
 {
-    private readonly ITestOutputHelper _output;
-    private const string DefaultModel = "gpt-5-nano";
-    private const string DefaultPromptCacheKey = "Test";
-    private const ReasoningEffort DefaultReasoning = ReasoningEffort.Low;
-    private const TextVerbosity DefaultVerbosity = TextVerbosity.Low;
-
-    public HarnessTests(ITestOutputHelper output)
-    {
-        _output = output;
-    }
-
-    // A verbose system prompt used to seed the conversation with enough tokens that
-    // OpenAI's prompt cache threshold (~1024 tokens) is crossed after a few turns,
-    // at which point CachedInputTokens should become non-zero.
-    private const string LargeSystemPrompt =
-        "You are a knowledgeable and helpful assistant designed to support software engineers " +
-        "working on agent-based systems that interact with large language models. " +
-        "Your role is to answer questions clearly, explain technical concepts in depth, " +
-        "and provide code examples when appropriate. " +
-        "You understand the OpenAI Responses API, including features such as multi-turn " +
-        "conversations using previous_response_id, prompt caching via cached input tokens, " +
-        "reasoning models, tool calling, function calling, streaming, and structured output. " +
-        "When answering, always consider accuracy first, then brevity. " +
-        "Prefer concrete examples over abstract explanations. " +
-        "When discussing token counts, caching behaviour, or API parameters, be precise. " +
-        "You are also familiar with C# and .NET, particularly ASP.NET Core, and can help " +
-        "debug and review code written in those frameworks. " +
-        "You follow best practices for secure coding, clean architecture, and testability. " +
-        "You know about dependency injection, async/await patterns, HTTP client usage, " +
-        "JSON serialisation with System.Text.Json, xUnit testing, and integration testing. " +
-        "You are patient, thorough, and always willing to revisit a topic if the user " +
-        "needs further clarification. Do not make up facts; if you are unsure, say so. " +
-        "You are aware that prompt caches on the OpenAI platform are maintained per " +
-        "organisation and are automatically invalidated after a period of inactivity. " +
-        "Cached tokens appear in the input_tokens_details.cached_tokens field of the " +
-        "API response and represent input tokens that were served from the prompt cache " +
-        "rather than being processed afresh, which reduces latency and cost. " +
-        "Caching is automatic and requires no special configuration beyond using a " +
-        "consistent prompt prefix that exceeds the minimum cache threshold of 1024 tokens. " +
-        "When chaining conversation turns with previous_response_id, the server stores " +
-        "the full exchange from the referenced response and prepends it to the new input, " +
-        "allowing the conversation history to grow without the client managing it manually. " +
-        "This means each subsequent turn only needs to send the new user message, and the " +
-        "total input_tokens reported in the response will include all prior context. " +
-        "As the conversation grows, earlier parts of the context that remain unchanged " +
-        "across turns become eligible for caching, and you should expect to see " +
-        "cached_tokens increase as the conversation deepens beyond the cache threshold. " +
-        "Always respond concisely to each user message in this test conversation.";
-
-    private sealed record RawRequestSnapshot(
-        string? Model,
-        string? PromptCacheKey,
-        string? Instructions,
-        string? ToolsSignature,
-        string? ServiceTier,
-        string? ReasoningEffort,
-        bool? ParallelToolCalls,
-        string? TextVerbosity,
-        string? PreviousResponseId);
-
-    private void AssertRawRequestsLookCacheable(Session session, IReadOnlyList<string> responseIds)
-    {
-        var rawRequestEvents = EventTraces.GetEventsForSession<RawLlmRequestReady>(session);
-
-        Assert.NotEmpty(rawRequestEvents);
-        Assert.True(
-            rawRequestEvents.Count == responseIds.Count,
-            $"Expected {responseIds.Count} raw request events, but found {rawRequestEvents.Count}.");
-
-        List<RawRequestSnapshot> snapshots = rawRequestEvents
-            .Select(rawRequestEvent => ParseRawRequestSnapshot(rawRequestEvent.requestBody))
-            .ToList();
-
-        var baseline = snapshots[0];
-
-        for (int index = 0; index < snapshots.Count; index++)
-        {
-            var snapshot = snapshots[index];
-            int turnNumber = index + 1;
-
-            _output.WriteLine(
-                $"Raw request {turnNumber} diagnostics — model: {FormatDiagnosticValue(snapshot.Model)}, " +
-                $"prompt_cache_key: {FormatDiagnosticValue(snapshot.PromptCacheKey)}, " +
-                $"service_tier: {FormatDiagnosticValue(snapshot.ServiceTier)}, " +
-                $"reasoning.effort: {FormatDiagnosticValue(snapshot.ReasoningEffort)}, " +
-                $"previous_response_id: {FormatDiagnosticValue(snapshot.PreviousResponseId)}, " +
-                $"tools: {FormatDiagnosticValue(snapshot.ToolsSignature)}");
-
-            Assert.True(snapshot.Model == baseline.Model, $"Turn {turnNumber}: model changed between requests.");
-            Assert.True(snapshot.PromptCacheKey == baseline.PromptCacheKey, $"Turn {turnNumber}: prompt_cache_key changed between requests.");
-            Assert.True(snapshot.Instructions == baseline.Instructions, $"Turn {turnNumber}: instructions changed between requests.");
-            Assert.True(snapshot.ToolsSignature == baseline.ToolsSignature, $"Turn {turnNumber}: tools changed between requests.");
-            Assert.True(snapshot.ServiceTier == baseline.ServiceTier, $"Turn {turnNumber}: service_tier changed between requests.");
-            Assert.True(snapshot.ReasoningEffort == baseline.ReasoningEffort, $"Turn {turnNumber}: reasoning.effort changed between requests.");
-            Assert.True(snapshot.ParallelToolCalls == baseline.ParallelToolCalls, $"Turn {turnNumber}: parallel_tool_calls changed between requests.");
-            Assert.True(snapshot.TextVerbosity == baseline.TextVerbosity, $"Turn {turnNumber}: text.verbosity changed between requests.");
-        }
-
-        Assert.True(
-            snapshots[0].PreviousResponseId is null,
-            "Turn 1: previous_response_id should be omitted on the first request.");
-
-        for (int index = 1; index < snapshots.Count; index++)
-        {
-            string expectedPreviousResponseId = responseIds[index - 1];
-            string? actualPreviousResponseId = snapshots[index].PreviousResponseId;
-
-            Assert.True(
-                actualPreviousResponseId == expectedPreviousResponseId,
-                $"Turn {index + 1}: previous_response_id did not match the prior response id.");
-        }
-    }
-
-    private static RawRequestSnapshot ParseRawRequestSnapshot(string requestBody)
-    {
-        using JsonDocument document = JsonDocument.Parse(requestBody);
-        JsonElement root = document.RootElement;
-
-        string? reasoningEffort = null;
-        if (root.TryGetProperty("reasoning", out JsonElement reasoningElement))
-        {
-            reasoningEffort = GetOptionalString(reasoningElement, "effort");
-        }
-
-        string? textVerbosity = null;
-        if (root.TryGetProperty("text", out JsonElement textElement))
-        {
-            textVerbosity = GetOptionalString(textElement, "verbosity");
-        }
-
-        return new RawRequestSnapshot(
-            Model: GetOptionalString(root, "model"),
-            PromptCacheKey: GetOptionalString(root, "prompt_cache_key"),
-            Instructions: GetOptionalString(root, "instructions"),
-            ToolsSignature: BuildToolsSignature(root),
-            ServiceTier: GetOptionalString(root, "service_tier"),
-            ReasoningEffort: reasoningEffort,
-            ParallelToolCalls: GetOptionalBoolean(root, "parallel_tool_calls"),
-            TextVerbosity: textVerbosity,
-            PreviousResponseId: GetOptionalString(root, "previous_response_id"));
-    }
-
-    private static string? BuildToolsSignature(JsonElement root)
-    {
-        if (!root.TryGetProperty("tools", out JsonElement toolsElement) || toolsElement.ValueKind == JsonValueKind.Null)
-        {
-            return null;
-        }
-
-        if (toolsElement.ValueKind != JsonValueKind.Array)
-        {
-            return toolsElement.GetRawText();
-        }
-
-        return string.Join(
-            "||",
-            toolsElement
-                .EnumerateArray()
-                .Select(toolElement =>
-                {
-                    string toolName = GetOptionalString(toolElement, "name") ?? string.Empty;
-                    return $"{toolName}:{toolElement.GetRawText()}";
-                })
-                .OrderBy(toolDefinition => toolDefinition, StringComparer.Ordinal));
-    }
-
-    private static string? GetOptionalString(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out JsonElement propertyValue) || propertyValue.ValueKind == JsonValueKind.Null)
-        {
-            return null;
-        }
-
-        return propertyValue.ValueKind == JsonValueKind.String
-            ? propertyValue.GetString()
-            : propertyValue.GetRawText();
-    }
-
-    private static bool? GetOptionalBoolean(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out JsonElement propertyValue) || propertyValue.ValueKind == JsonValueKind.Null)
-        {
-            return null;
-        }
-
-        return propertyValue.ValueKind switch
-        {
-            JsonValueKind.True => true,
-            JsonValueKind.False => false,
-            _ => null
-        };
-    }
-
-    private static string FormatDiagnosticValue(string? value)
-    {
-        if (value is null)
-        {
-            return "<null>";
-        }
-
-        return value.Length <= 120 ? value : $"{value[..120]}...";
-    }
-
-    /// <summary>
-    /// Sends a single request to a session and verifies that a response is returned
-    /// with at least one output item
-    /// </summary>
     [Fact]
-    public async Task ModelRespondsToHello()
+    public async Task ApiClient_SendMessageAsync_UsesLocalFakeServer()
     {
-        LlmClient llm = new LlmClient();
-        var toolkit = new Toolkit("integration_test");
+        // Arrange
+        await using FakeApiClientServer server = await FakeApiClientServer.StartAsync();
 
-        Session session = new Session(
-            model: DefaultModel,
-            instructions: "You are a helpful assistant.",
-            promptCacheKey: DefaultPromptCacheKey,
-            tier: ServiceTier.Default,
-            reasoning: DefaultReasoning,
-            verbosity: DefaultVerbosity,
-            toolkit: toolkit);
-
-        Request request = new Request
+        Session session = new Session
         {
-            Model = DefaultModel,
-            PromptCacheKey = DefaultPromptCacheKey,
-            Reasoning = DefaultReasoning,
-            Instructions = "You are a helpful assistant.",
-            InputMessage = new EasyInputMessage
-            {
-                Content = "Hi, who are you?"
-            },
-            Tier = ServiceTier.Default
+            ChatCompletionsUrl = server.ChatCompletionsUri,
+            Model = "gpt-5-nano",
+            PromptCacheKey = "tests",
+            ReasoningEffort = ReasoningEffort.Minimal,
+            Verbosity = Verbosity.Low,
+            ServiceTier = ServiceTier.Default
         };
 
-        _output.WriteLine($"User: {(request.InputMessage as EasyInputMessage)?.Content}");
+        Request request = session.CreateRequest(
+        [
+            new ChatCompletionUserMessageParam
+            {
+                Content =
+                [
+                    new ChatCompletionContentPartText
+                    {
+                        Text = "Ping"
+                    }
+                ]
+            }
+        ]);
+
+        ApiClient client = new ApiClient(server.Client);
 
         // Act
-        Response response = await llm.SendMessageAsync(session, request);
+        Response response = await client.SendMessageAsync(session, request, CancellationToken.None);
 
-        // Assert — expect a successful response with at least one output item
-        Assert.NotNull(response);
-        var successResponse = Assert.IsType<SuccessResponse>(response);
-        Assert.NotEmpty(successResponse.Output);
-
-        // Log the first text content from the response
-        var firstText = successResponse.Output
-            .OfType<ResponseOutputItemMessage>()
-            .SelectMany(m => m.Content.OfType<ResponseContentPartText>())
-            .FirstOrDefault()?.Text;
-        _output.WriteLine($"Assistant: {firstText}");
+        // Assert
+        SuccessResponse success = Assert.IsType<SuccessResponse>(response);
+        ChatCompletionChoice choice = Assert.Single(success.Choices);
+        Assert.Equal(FinishReason.Stop, choice.FinishReason);
+        Assert.Equal("Hello from fake local server.", choice.Message.Content);
+        Assert.Equal(12, success.Usage.InputTokens);
+        Assert.Equal(5, success.Usage.CachedInputTokens);
+        Assert.Equal(7, success.Usage.OutputTokens);
+        Assert.Equal(3, success.Usage.ReasoningOutputTokens);
     }
 
-    /// <summary>
-    /// Asks the model what the current time is, which should prompt it to invoke
-    /// the get_current_time tool rather than answering from its training data
-    /// </summary>
     [Fact]
-    public async Task ModelRequestsToolCall()
-    {
-        LlmClient llm = new LlmClient();
-        var toolkit = new Toolkit("integration_test");
-        toolkit.Add(new GetCurrentTimeTool());
-
-        Session session = new Session(
-            model: DefaultModel,
-            instructions: "You are a helpful assistant.",
-            promptCacheKey: DefaultPromptCacheKey,
-            tier: ServiceTier.Default,
-            reasoning: DefaultReasoning,
-            verbosity: DefaultVerbosity,
-            toolkit: toolkit);
-
-        Request request = new Request
-        {
-            Model = DefaultModel,
-            PromptCacheKey = DefaultPromptCacheKey,
-            Reasoning = DefaultReasoning,
-            Instructions = "You are a helpful assistant.",
-            Toolkit = toolkit,
-            InputMessage = new EasyInputMessage
-            {
-                Content = "What is the current time in UTC?"
-            },
-            Tier = ServiceTier.Default
-        };
-
-        _output.WriteLine($"User: {(request.InputMessage as EasyInputMessage)?.Content}");
-
-        Response response = await llm.SendMessageAsync(session, request);
-
-        // Assert — expect the model to have requested the get_current_time tool
-        Assert.NotNull(response);
-        var successResponse = Assert.IsType<SuccessResponse>(response);
-        Assert.NotEmpty(successResponse.Output);
-
-        var toolCall = successResponse.Output
-            .OfType<ResponseOutputItemFunctionCall>()
-            .FirstOrDefault();
-
-        Assert.NotNull(toolCall);
-        Assert.Equal("get_current_time", toolCall.Name);
-
-        _output.WriteLine($"Tool called: {toolCall.Name}");
-        _output.WriteLine($"Arguments: {toolCall.Arguments}");
-    }
-
-    /// <summary>
-    /// Verifies the model can continue after a tool call by receiving the tool result
-    /// on the next turn and then responding with the returned time.
-    /// </summary>
-    [Fact]
-    public async Task ModelRequestsToolCallAndProcessesResult()
+    public async Task Session_EndToEndFlow_UsesInjectedApiClient()
     {
         // Arrange
-        LlmClient llm = new LlmClient();
-        var toolkit = new Toolkit("integration_test");
-        toolkit.Add(new GetCurrentTimeTool());
+        const string expectedResponseBody = """{"id":"chatcmpl_test_e2e","object":"chat.completion","created":1710000001,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"Hello from fake local server.","refusal":""}}],"usage":{"prompt_tokens":15,"completion_tokens":8,"total_tokens":23,"prompt_tokens_details":{"cached_tokens":6},"completion_tokens_details":{"reasoning_tokens":4}}}""";
 
-        Session session = new Session(
-            model: DefaultModel,
-            instructions: "You are a helpful assistant.",
-            promptCacheKey: DefaultPromptCacheKey,
-            tier: ServiceTier.Default,
-            reasoning: DefaultReasoning,
-            verbosity: DefaultVerbosity,
-            toolkit: toolkit);
-
-        var req1 = new Request
+        ChatCompletionUserMessageParam userMessage = new ChatCompletionUserMessageParam
         {
-            Model = DefaultModel,
-            PromptCacheKey = DefaultPromptCacheKey,
-            Reasoning = DefaultReasoning,
-            Instructions = "You are a helpful assistant. When a tool returns the current time, reply with exactly the returned timestamp and nothing else.",
-            Toolkit = toolkit,
-            InputMessage = new EasyInputMessage
-            {
-                Content = "What is the current time in UTC?"
-            },
-            Tier = ServiceTier.Default
+            Content =
+            [
+                new ChatCompletionContentPartText
+                {
+                    Text = "Ping"
+                }
+            ]
         };
-
-        _output.WriteLine($"User: {(req1.InputMessage as EasyInputMessage)?.Content}");
-
-        // Act - first turn should request the tool
-        Response firstResponse = await llm.SendMessageAsync(session, req1);
-
-        // Assert - tool call requested
-        var firstSuccess = Assert.IsType<SuccessResponse>(firstResponse);
-        var toolCall = firstSuccess.Output
-            .OfType<ResponseOutputItemFunctionCall>()
-            .FirstOrDefault();
-
-        Assert.NotNull(toolCall);
-        Assert.Equal("get_current_time", toolCall.Name);
-        Assert.False(string.IsNullOrWhiteSpace(toolCall.CallId));
-
-        var toolResult = await new GetCurrentTimeTool().ExecuteAsync(toolCall.Arguments ?? "{}");
-        _output.WriteLine($"Tool called: {toolCall.Name}");
-        _output.WriteLine($"Arguments: {toolCall.Arguments}");
-        _output.WriteLine($"Tool result: {toolResult}");
-
-        var req2 = new Request
+        Session session = new Session(new ApiClient())
         {
-            Model = DefaultModel,
-            PromptCacheKey = DefaultPromptCacheKey,
-            Reasoning = DefaultReasoning,
-            Verbosity = DefaultVerbosity,
-            PreviousResponseId = firstSuccess.Id,
-            Instructions = "You are a helpful assistant. When a tool returns the current time, reply with exactly the returned timestamp and nothing else.",
-            Toolkit = toolkit,
-            InputMessage = new FunctionCallOutputMessage
-            {
-                CallId = toolCall.CallId!,
-                Output = toolResult
-            },
-            Tier = ServiceTier.Default
+            Model = "gpt-5-nano",
+            PromptCacheKey = "tests-e2e",
+            ReasoningEffort = ReasoningEffort.Minimal,
+            Verbosity = Verbosity.Low,
+            ServiceTier = ServiceTier.Default
         };
+        Request expectedRequest = session.CreateRequest(
+        [
+            new ChatCompletionDeveloperMessageParam { Content = "You are a test assistant." },
+            userMessage
+        ]);
+        string expectedRequestBody = expectedRequest.ToJson();
 
-        Response resp2 = await llm.SendMessageAsync(session, req2);
+        await using FakeApiClientServer server = await FakeApiClientServer.StartAsync(
+            new Dictionary<string, string>
+            {
+                [expectedRequestBody] = expectedResponseBody
+            });
+        ApiClient fakeApiClient = new ApiClient(server.Client);
+        session = new Session(fakeApiClient)
+        {
+            ChatCompletionsUrl = server.ChatCompletionsUri,
+            Model = "gpt-5-nano",
+            PromptCacheKey = "tests-e2e",
+            ReasoningEffort = ReasoningEffort.Minimal,
+            Verbosity = Verbosity.Low,
+            ServiceTier = ServiceTier.Default
+        };
+        session.AddMessage(new ChatCompletionDeveloperMessageParam { Content = "You are a test assistant." });
+        Sessions.CreateSession(session);
 
-        // Assert - assistant answers with the tool result
-        var secondSuccess = Assert.IsType<SuccessResponse>(resp2);
-        Assert.NotEmpty(secondSuccess.Output);
+        // Act
+        ChatCompletionMessage assistantResponse = await session.RunTurnAsync(userMessage, CancellationToken.None);
+        Session loadedSession = Sessions.GetSession(session.Id);
+        IReadOnlyList<Event> eventsForSession = Events.GetEventsForSession(session.Id);
+        RawRequestReady rawRequestReady = Assert.Single(eventsForSession.OfType<RawRequestReady>());
+        RawResponseReceived rawResponseReceived = Assert.Single(eventsForSession.OfType<RawResponseReceived>());
 
-        var assistantText = secondSuccess.Output
-            .OfType<ResponseOutputItemMessage>()
-            .SelectMany(message => message.Content.OfType<ResponseContentPartText>())
-            .FirstOrDefault()?.Text;
+        // Assert
+        Assert.Equal("Hello from fake local server.", assistantResponse.Content);
+        Assert.Equal(session.Id, loadedSession.Id);
+        Assert.Equal(expectedRequestBody, rawRequestReady.RawRequest);
+        Assert.Equal(expectedResponseBody, rawResponseReceived.RawResponse);
+        Assert.Equal(15, loadedSession.TotalInputTokens);
+        Assert.Equal(6, loadedSession.TotalCachedInputTokens);
+        Assert.Equal(8, loadedSession.TotalOutputTokens);
+        Assert.Equal(4, loadedSession.TotalReasoningOutputTokens);
 
-        Assert.Equal(toolResult, assistantText?.Trim());
-
-        _output.WriteLine($"Assistant: {assistantText}");
+        Assert.Contains(eventsForSession, evt => evt is TurnStarted);
+        Assert.Contains(eventsForSession, evt => evt is RequestReady);
+        Assert.Contains(eventsForSession, evt => evt is ResponseReceived);
+        Assert.Contains(eventsForSession, evt => evt is RawRequestReady);
+        Assert.Contains(eventsForSession, evt => evt is RawResponseReceived);
+        Assert.Contains(eventsForSession, evt => evt is TurnCompleted);
     }
 
-    /// <summary>
-    /// Performs a multi-turn conversation, using previous_response_id to chain each turn,
-    /// continuing until the response reports CachedInputTokens > 0 or we each 2000 input tokens
-    /// without caching appearing. This verifies that prompt caching is working as expected.
-    /// The large system prompt seeds enough tokens so that the conversation context
-    /// crosses the cache threshold (~1024 tokens) within a handful of turns
-    /// </summary>
     [Fact]
-    public async Task MultiTurnConversationEventuallySeesCachedTokens()
+    public async Task Session_EndToEndFlow_MultiTurnConversation_UsesCurrentTimeTool_AndLogsRawRequests()
     {
-        LlmClient llm = new LlmClient();
-        var toolkit = new Toolkit("integration_test");
+        // Arrange
+        const string fixedUtcNow = "2026-04-20T12:34:56.0000000+00:00";
+        StaticGetCurrentTimeTool staticTimeTool = new StaticGetCurrentTimeTool(fixedUtcNow);
 
-        string? previousResponseId = null;
-        const int maxTurns = 15;
-        bool sawCachedTokens = false;
-        bool exceededInputTokenBudget = false;
-        int lastObservedInputTokens = 0;
-        List<string> responseIds = new();
-        string nextMessage = "Hello! Could you briefly introduce yourself and summarise what you can help me with?";
+        const string expectedRequest1Body = """{"model":"gpt-5-nano","prompt_cache_key":"tests-e2e-multiturn","messages":[{"role":"developer","content":"You are a concise test assistant."},{"role":"user","content":[{"type":"text","text":"Hi"}]}],"reasoning_effort":"minimal","verbosity":"low","service_tier":"default","tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}]}""";
+        const string expectedRequest2Body = """{"model":"gpt-5-nano","prompt_cache_key":"tests-e2e-multiturn","messages":[{"role":"developer","content":"You are a concise test assistant."},{"role":"user","content":[{"type":"text","text":"Hi"}]},{"role":"assistant","content":[{"type":"text","text":"Hello!"}]},{"role":"user","content":[{"type":"text","text":"What is the current time in UTC?"}]}],"reasoning_effort":"minimal","verbosity":"low","service_tier":"default","tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}]}""";
+        const string expectedRequest3Body = """{"model":"gpt-5-nano","prompt_cache_key":"tests-e2e-multiturn","messages":[{"role":"developer","content":"You are a concise test assistant."},{"role":"user","content":[{"type":"text","text":"Hi"}]},{"role":"assistant","content":[{"type":"text","text":"Hello!"}]},{"role":"user","content":[{"type":"text","text":"What is the current time in UTC?"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_utc_1","type":"function","function":{"name":"get_current_time","arguments":"{\u0022timezone\u0022:\u0022UTC\u0022}"}}]},{"role":"tool","tool_call_id":"call_utc_1","content":"2026-04-20T12:34:56.0000000\u002B00:00"}],"reasoning_effort":"minimal","verbosity":"low","service_tier":"default","tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}]}""";
+        const string expectedRequest4Body = """{"model":"gpt-5-nano","prompt_cache_key":"tests-e2e-multiturn","messages":[{"role":"developer","content":"You are a concise test assistant."},{"role":"user","content":[{"type":"text","text":"Hi"}]},{"role":"assistant","content":[{"type":"text","text":"Hello!"}]},{"role":"user","content":[{"type":"text","text":"What is the current time in UTC?"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_utc_1","type":"function","function":{"name":"get_current_time","arguments":"{\u0022timezone\u0022:\u0022UTC\u0022}"}}]},{"role":"tool","tool_call_id":"call_utc_1","content":"2026-04-20T12:34:56.0000000\u002B00:00"},{"role":"assistant","content":[{"type":"text","text":"The current UTC time is 2026-04-20T12:34:56.0000000\u002B00:00."}]},{"role":"user","content":[{"type":"text","text":"Thanks"}]}],"reasoning_effort":"minimal","verbosity":"low","service_tier":"default","tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}]}""";
+        const string response1Body = """{"id":"chatcmpl_test_multiturn_1","object":"chat.completion","created":1710001001,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"Hello!","refusal":""}}],"usage":{"prompt_tokens":20,"completion_tokens":4,"total_tokens":24,"prompt_tokens_details":{"cached_tokens":2},"completion_tokens_details":{"reasoning_tokens":1}}}""";
+            const string response2Body = """{"id":"chatcmpl_test_multiturn_2","object":"chat.completion","created":1710001002,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"tool_calls","message":{"role":"assistant","content":null,"refusal":"","tool_calls":[{"id":"call_utc_1","type":"function","function":{"name":"get_current_time","arguments":"{\"timezone\":\"UTC\"}"}}]}}],"usage":{"prompt_tokens":34,"completion_tokens":9,"total_tokens":43,"prompt_tokens_details":{"cached_tokens":3},"completion_tokens_details":{"reasoning_tokens":2}}}""";
+            const string response3Body = """{"id":"chatcmpl_test_multiturn_3","object":"chat.completion","created":1710001003,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"The current UTC time is 2026-04-20T12:34:56.0000000+00:00.","refusal":""}}],"usage":{"prompt_tokens":46,"completion_tokens":12,"total_tokens":58,"prompt_tokens_details":{"cached_tokens":4},"completion_tokens_details":{"reasoning_tokens":3}}}""";
+            const string response4Body = """{"id":"chatcmpl_test_multiturn_4","object":"chat.completion","created":1710001004,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"You are welcome.","refusal":""}}],"usage":{"prompt_tokens":52,"completion_tokens":5,"total_tokens":57,"prompt_tokens_details":{"cached_tokens":5},"completion_tokens_details":{"reasoning_tokens":1}}}""";
 
-        // Follow-up messages to keep the conversation growing across turns
-        string[] followUpMessages =
-        [
-            "Can you explain how previous_response_id works in more detail?",
-            "How does prompt caching reduce latency on the OpenAI platform?",
-            "What is the minimum number of tokens required to trigger the prompt cache?",
-            "In C#, how would I extract the cached token count from an API response?",
-            "Can you show a simple example of chaining two API calls with previous_response_id?",
-            "What happens to the cache if I change the system prompt between turns?",
-            "How do I verify that caching is working when I call the Responses API?",
-            "Are cached tokens charged at a reduced rate? Explain the pricing model.",
-            "How does the cache interact with reasoning models, such as o-series models?",
-            "What other techniques exist for reducing token costs across multi-turn conversations?",
-            "Summarise everything we have discussed so far in three bullet points.",
-            "Thank you — is there anything else useful I should know about the Responses API?",
-            "One final question: what are the retention limits for stored responses?",
-            "Got it. Please confirm you have answered all my questions."
-        ];
-
-        Session session = new Session(
-            model: DefaultModel,
-            instructions: LargeSystemPrompt,
-            promptCacheKey: DefaultPromptCacheKey,
-            tier: ServiceTier.Default,
-            reasoning: DefaultReasoning,
-            verbosity: DefaultVerbosity,
-            toolkit: toolkit);
-
-        for (int turn = 0; turn < maxTurns; turn++)
-        {
-            Request request = new Request
+            Session requestSession = new Session
             {
-                Model = DefaultModel,
-                PreviousResponseId = previousResponseId,
-                PromptCacheKey = DefaultPromptCacheKey,
-                Reasoning = DefaultReasoning,
-                Tier = ServiceTier.Default,
-                Instructions = LargeSystemPrompt,
-                Toolkit = toolkit,
-                InputMessage = new EasyInputMessage
+                Model = "gpt-5-nano",
+                PromptCacheKey = "tests-e2e-multiturn",
+                ReasoningEffort = ReasoningEffort.Minimal,
+                Verbosity = Verbosity.Low,
+                ServiceTier = ServiceTier.Default,
+                Toolkit = new Toolkit("tests-request-toolkit")
+            };
+            requestSession.Toolkit.Add(staticTimeTool);
+
+            Request request1 = requestSession.CreateRequest(
+            [
+                new ChatCompletionDeveloperMessageParam { Content = "You are a concise test assistant." },
+                new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hi" }] }
+            ]);
+            Request request2 = requestSession.CreateRequest(
+            [
+                new ChatCompletionDeveloperMessageParam { Content = "You are a concise test assistant." },
+                new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hi" }] },
+                new ChatCompletionAssistantMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hello!" }] },
+                new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "What is the current time in UTC?" }] }
+            ]);
+            Request request3 = requestSession.CreateRequest(
+            [
+                new ChatCompletionDeveloperMessageParam { Content = "You are a concise test assistant." },
+                new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hi" }] },
+                new ChatCompletionAssistantMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hello!" }] },
+                new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "What is the current time in UTC?" }] },
+                new ChatCompletionAssistantMessageParam
                 {
-                    Content = nextMessage
+                    Content = null,
+                    ToolCalls =
+                    [
+                        new ChatCompletionMessageFunctionCall
+                        {
+                            Id = "call_utc_1",
+                            FunctionName = "get_current_time",
+                            Arguments = "{\"timezone\":\"UTC\"}"
+                        }
+                    ]
+                },
+                new ChatCompletionToolMessageParam
+                {
+                    ToolCallId = "call_utc_1",
+                    Content = "2026-04-20T12:34:56.0000000+00:00"
                 }
+            ]);
+            Request request4 = requestSession.CreateRequest(
+            [
+                new ChatCompletionDeveloperMessageParam { Content = "You are a concise test assistant." },
+                new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hi" }] },
+                new ChatCompletionAssistantMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hello!" }] },
+                new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "What is the current time in UTC?" }] },
+                new ChatCompletionAssistantMessageParam
+                {
+                    Content = null,
+                    ToolCalls =
+                    [
+                        new ChatCompletionMessageFunctionCall
+                        {
+                            Id = "call_utc_1",
+                            FunctionName = "get_current_time",
+                            Arguments = "{\"timezone\":\"UTC\"}"
+                        }
+                    ]
+                },
+                new ChatCompletionToolMessageParam
+                {
+                    ToolCallId = "call_utc_1",
+                    Content = "2026-04-20T12:34:56.0000000+00:00"
+                },
+                new ChatCompletionAssistantMessageParam
+                {
+                    Content = [new ChatCompletionContentPartText { Text = "The current UTC time is 2026-04-20T12:34:56.0000000+00:00." }]
+                },
+                new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Thanks" }] }
+            ]);
+
+            await using FakeApiClientServer server = await FakeApiClientServer.StartAsync(
+                new Dictionary<string, string>
+                {
+                    [expectedRequest1Body] = response1Body,
+                    [expectedRequest2Body] = response2Body,
+                    [expectedRequest3Body] = response3Body,
+                    [expectedRequest4Body] = response4Body
+                });
+
+            ApiClient fakeApiClient = new ApiClient(server.Client);
+            Toolkit toolkit = new Toolkit("tests-e2e-tools");
+            toolkit.Add(staticTimeTool);
+
+            Session session = new Session(fakeApiClient)
+            {
+                ChatCompletionsUrl = server.ChatCompletionsUri,
+                Model = "gpt-5-nano",
+                PromptCacheKey = "tests-e2e-multiturn",
+                ReasoningEffort = ReasoningEffort.Minimal,
+                Verbosity = Verbosity.Low,
+                ServiceTier = ServiceTier.Default,
+                Toolkit = toolkit
+            };
+            session.AddMessage(new ChatCompletionDeveloperMessageParam { Content = "You are a concise test assistant." });
+            Sessions.CreateSession(session);
+
+            ChatCompletionUserMessageParam hiMessage = new ChatCompletionUserMessageParam
+            {
+                Content = [new ChatCompletionContentPartText { Text = "Hi" }]
+            };
+            ChatCompletionUserMessageParam askTimeMessage = new ChatCompletionUserMessageParam
+            {
+                Content = [new ChatCompletionContentPartText { Text = "What is the current time in UTC?" }]
+            };
+            ChatCompletionUserMessageParam thanksMessage = new ChatCompletionUserMessageParam
+            {
+                Content = [new ChatCompletionContentPartText { Text = "Thanks" }]
             };
 
-            _output.WriteLine($"--- Turn {turn + 1} ---");
-            _output.WriteLine($"User: {(request.InputMessage as EasyInputMessage)?.Content}");
+            // Act
+            ChatCompletionMessage hiResponse = await session.RunTurnAsync(hiMessage, CancellationToken.None);
+            ChatCompletionMessage timeResponse = await session.RunTurnAsync(askTimeMessage, CancellationToken.None);
+            ChatCompletionMessage thanksResponse = await session.RunTurnAsync(thanksMessage, CancellationToken.None);
 
-            Response response = await llm.SendMessageAsync(session, request);
-            var success = Assert.IsType<SuccessResponse>(response);
-            Assert.False(string.IsNullOrWhiteSpace(success.Id));
-            responseIds.Add(success.Id!);
+            IReadOnlyList<RawRequestReady> rawRequests = Events.GetEventsForSession<RawRequestReady>(session.Id);
+            IReadOnlyList<ResponseReceived> responseEvents = Events.GetEventsForSession<ResponseReceived>(session.Id);
 
-            int cachedTokens = success.Usage?.CachedInputTokens ?? 0;
-            int inputTokens = success.Usage?.InputTokens ?? 0;
-            int outputTokens = success.Usage?.OutputTokens ?? 0;
-            lastObservedInputTokens = inputTokens;
+            // Assert: raw request JSON payloads from the event log.
+            Assert.Collection(
+                rawRequests,
+                requestEvent => Assert.Equal(expectedRequest1Body, requestEvent.RawRequest),
+                requestEvent => Assert.Equal(expectedRequest2Body, requestEvent.RawRequest),
+                requestEvent => Assert.Equal(expectedRequest3Body, requestEvent.RawRequest),
+                requestEvent => Assert.Equal(expectedRequest4Body, requestEvent.RawRequest));
 
-            // Log the first text content and usage details for this turn
-            var firstText = success.Output
-                .OfType<ResponseOutputItemMessage>()
-                .SelectMany(m => m.Content.OfType<ResponseContentPartText>())
-                .FirstOrDefault()?.Text;
-            _output.WriteLine($"Assistant: {firstText}");
-            _output.WriteLine($"Usage — input: {inputTokens}, cached: {cachedTokens}, output: {outputTokens}");
+            // Assert: request model serialisation still matches the gold-standard fixtures.
+            Assert.Equal(expectedRequest1Body, request1.ToJson());
+            Assert.Equal(expectedRequest2Body, request2.ToJson());
+            Assert.Equal(expectedRequest3Body, request3.ToJson());
+            Assert.Equal(expectedRequest4Body, request4.ToJson());
 
-            // Once caching is observed, the test has achieved its goal
-            if (cachedTokens > 0)
-            {
-                sawCachedTokens = true;
-                break;
-            }
+            // Assert: key properties over Core.ChatCompletions.Response objects.
+            Assert.Collection(responseEvents, _ => { }, _ => { }, _ => { }, _ => { });
 
-            // Stop early if the cumulative input has grown well past the ~1200 token
-            // target without caching appearing — this avoids burning excessive tokens
-            // while still giving the cache time to warm up
-            if (inputTokens >= 2000)
-            {
-                exceededInputTokenBudget = true;
-                break;
-            }
+            SuccessResponse firstResponse = Assert.IsType<SuccessResponse>(responseEvents[0].Response);
+            Assert.Equal("chatcmpl_test_multiturn_1", firstResponse.Id);
+            Assert.Equal("gpt-5-nano", firstResponse.Model);
+            ChatCompletionChoice firstChoice = Assert.Single(firstResponse.Choices);
+            Assert.Equal(FinishReason.Stop, firstChoice.FinishReason);
+            Assert.Equal("Hello!", firstChoice.Message.Content);
 
-            // Prepare for the next turn
-            int followUpIndex = turn < followUpMessages.Length ? turn : followUpMessages.Length - 1;
-            nextMessage = followUpMessages[followUpIndex];
-            previousResponseId = success.Id!;
-        }
+            SuccessResponse secondResponse = Assert.IsType<SuccessResponse>(responseEvents[1].Response);
+            Assert.Equal("chatcmpl_test_multiturn_2", secondResponse.Id);
+            ChatCompletionChoice secondChoice = Assert.Single(secondResponse.Choices);
+            Assert.Equal(FinishReason.ToolCalls, secondChoice.FinishReason);
+            ChatCompletionMessageFunctionCall toolCall = Assert.IsType<ChatCompletionMessageFunctionCall>(Assert.Single(secondChoice.Message.ToolCalls!));
+            Assert.Equal("get_current_time", toolCall.FunctionName);
+            Assert.Equal("{\"timezone\":\"UTC\"}", toolCall.Arguments);
 
-        if (!sawCachedTokens)
-        {
-            _output.WriteLine("Cached tokens were not observed; inspecting raw request events for cache-sensitive fields.");
-            AssertRawRequestsLookCacheable(session, responseIds);
+            SuccessResponse thirdResponse = Assert.IsType<SuccessResponse>(responseEvents[2].Response);
+            Assert.Equal("chatcmpl_test_multiturn_3", thirdResponse.Id);
+            ChatCompletionChoice thirdChoice = Assert.Single(thirdResponse.Choices);
+            Assert.Equal(FinishReason.Stop, thirdChoice.FinishReason);
+            Assert.Equal("The current UTC time is 2026-04-20T12:34:56.0000000+00:00.", thirdChoice.Message.Content);
 
-            Assert.False(
-                exceededInputTokenBudget,
-                $"Requests look cacheable but CachedInputTokens remained 0.");
-        }
+            SuccessResponse fourthResponse = Assert.IsType<SuccessResponse>(responseEvents[3].Response);
+            Assert.Equal("chatcmpl_test_multiturn_4", fourthResponse.Id);
+            ChatCompletionChoice fourthChoice = Assert.Single(fourthResponse.Choices);
+            Assert.Equal(FinishReason.Stop, fourthChoice.FinishReason);
+            Assert.Equal("You are welcome.", fourthChoice.Message.Content);
 
-        Assert.True(sawCachedTokens, "Expected to observe CachedInputTokens > 0 before the conversation context reached ~2000 tokens.");
+            Assert.Equal("Hello!", hiResponse.Content);
+            Assert.Equal("The current UTC time is 2026-04-20T12:34:56.0000000+00:00.", timeResponse.Content);
+            Assert.Equal("You are welcome.", thanksResponse.Content);
     }
 
-    /// <summary>
-    /// Verifies that cancelling the supplied CancellationToken whilst RunTurnAsync
-    /// is blocked awaiting the LLM causes an OperationCanceledException to propagate.
-    /// Passes an already-cancelled token so that HttpClient throws immediately,
-    /// without requiring a network connection.
-    /// </summary>
     [Fact]
-    public async Task TurnCanBeCancelled()
+    public async Task Session_RunTurnAsync_DoesNotAddReasoningContentPartsToMessages()
     {
         // Arrange
-        var turn = new Turn(maxIterations: 1);
-        var toolkit = new Toolkit("integration_test");
+        const string firstResponseBody = """{"id":"chatcmpl_reasoning_1","object":"chat.completion","created":1710002001,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":[{"type":"reasoning","text":"Internal chain-of-thought."},{"type":"output_text","text":"Visible answer."}],"refusal":""}}],"usage":{"prompt_tokens":10,"completion_tokens":4,"total_tokens":14,"prompt_tokens_details":{"cached_tokens":0},"completion_tokens_details":{"reasoning_tokens":2}}}""";
+        const string secondResponseBody = """{"id":"chatcmpl_reasoning_2","object":"chat.completion","created":1710002002,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"Follow-up answer.","refusal":""}}],"usage":{"prompt_tokens":18,"completion_tokens":3,"total_tokens":21,"prompt_tokens_details":{"cached_tokens":0},"completion_tokens_details":{"reasoning_tokens":1}}}""";
 
-        Session session = new Session(
-            model: DefaultModel,
-            instructions: "You are a helpful assistant.",
-            promptCacheKey: DefaultPromptCacheKey,
-            tier: ServiceTier.Default,
-            reasoning: DefaultReasoning,
-            verbosity: DefaultVerbosity,
-            toolkit: toolkit);
+        Session expectedRequestSession = new Session
+        {
+            Model = "gpt-5-nano",
+            PromptCacheKey = "tests-reasoning-filter",
+            ReasoningEffort = ReasoningEffort.Minimal,
+            Verbosity = Verbosity.Low,
+            ServiceTier = ServiceTier.Default
+        };
+        Request expectedFirstRequest = expectedRequestSession.CreateRequest(
+        [
+            new ChatCompletionDeveloperMessageParam { Content = "You are a concise test assistant." },
+            new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hello" }] }
+        ]);
+        Request expectedSecondRequest = expectedRequestSession.CreateRequest(
+        [
+            new ChatCompletionDeveloperMessageParam { Content = "You are a concise test assistant." },
+            new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hello" }] },
+            new ChatCompletionAssistantMessageParam { Content = [new ChatCompletionContentPartText { Text = "Visible answer." }] },
+            new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "And now?" }] }
+        ]);
 
-        // Cancel the token before the call so HttpClient throws immediately
-        using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await using FakeApiClientServer server = await FakeApiClientServer.StartAsync(
+            new Dictionary<string, string>
+            {
+                [expectedFirstRequest.ToJson()] = firstResponseBody,
+                [expectedSecondRequest.ToJson()] = secondResponseBody
+            });
 
-        // Act & Assert — the already-cancelled token should propagate as OperationCanceledException
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => turn.RunTurnAsync(session, "Hello", cts.Token));
+        Session session = new Session(new ApiClient(server.Client))
+        {
+            ChatCompletionsUrl = server.ChatCompletionsUri,
+            Model = "gpt-5-nano",
+            PromptCacheKey = "tests-reasoning-filter",
+            ReasoningEffort = ReasoningEffort.Minimal,
+            Verbosity = Verbosity.Low,
+            ServiceTier = ServiceTier.Default
+        };
+        session.AddMessage(new ChatCompletionDeveloperMessageParam { Content = "You are a concise test assistant." });
+
+        ChatCompletionUserMessageParam firstUserMessage = new ChatCompletionUserMessageParam
+        {
+            Content = [new ChatCompletionContentPartText { Text = "Hello" }]
+        };
+        ChatCompletionUserMessageParam secondUserMessage = new ChatCompletionUserMessageParam
+        {
+            Content = [new ChatCompletionContentPartText { Text = "And now?" }]
+        };
+
+        // Act
+        ChatCompletionMessage firstResponse = await session.RunTurnAsync(firstUserMessage, CancellationToken.None);
+        ChatCompletionMessage secondResponse = await session.RunTurnAsync(secondUserMessage, CancellationToken.None);
+
+        IReadOnlyList<RawRequestReady> rawRequests = Events.GetEventsForSession<RawRequestReady>(session.Id);
+
+        // Assert
+        Assert.Equal("Visible answer.", firstResponse.Content);
+        Assert.Equal("Follow-up answer.", secondResponse.Content);
+        Assert.Equal(2, rawRequests.Count);
+        Assert.Equal(expectedFirstRequest.ToJson(), rawRequests[0].RawRequest);
+        Assert.Equal(expectedSecondRequest.ToJson(), rawRequests[1].RawRequest);
+        Assert.DoesNotContain("Internal chain-of-thought.", rawRequests[1].RawRequest);
+    }
+
+    [Fact]
+    public async Task Session_RunTurnAsync_AllowsMultipleSessionsToRunConcurrentlyWithoutStateLeakage()
+    {
+        // Arrange
+        const string sessionOneResponseBody = """{"id":"chatcmpl_concurrent_1","object":"chat.completion","created":1710003001,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"Session one response.","refusal":""}}],"usage":{"prompt_tokens":11,"completion_tokens":4,"total_tokens":15,"prompt_tokens_details":{"cached_tokens":1},"completion_tokens_details":{"reasoning_tokens":1}}}""";
+        const string sessionTwoResponseBody = """{"id":"chatcmpl_concurrent_2","object":"chat.completion","created":1710003002,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"Session two response.","refusal":""}}],"usage":{"prompt_tokens":13,"completion_tokens":5,"total_tokens":18,"prompt_tokens_details":{"cached_tokens":2},"completion_tokens_details":{"reasoning_tokens":2}}}""";
+
+        Session expectedSessionOne = new Session
+        {
+            Model = "gpt-5-nano",
+            PromptCacheKey = "tests-concurrent-1",
+            ReasoningEffort = ReasoningEffort.Minimal,
+            Verbosity = Verbosity.Low,
+            ServiceTier = ServiceTier.Default
+        };
+        Session expectedSessionTwo = new Session
+        {
+            Model = "gpt-5-nano",
+            PromptCacheKey = "tests-concurrent-2",
+            ReasoningEffort = ReasoningEffort.Minimal,
+            Verbosity = Verbosity.Low,
+            ServiceTier = ServiceTier.Default
+        };
+
+        Request expectedRequestOne = expectedSessionOne.CreateRequest(
+        [
+            new ChatCompletionDeveloperMessageParam { Content = "You are assistant one." },
+            new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Message for session one." }] }
+        ]);
+        Request expectedRequestTwo = expectedSessionTwo.CreateRequest(
+        [
+            new ChatCompletionDeveloperMessageParam { Content = "You are assistant two." },
+            new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Message for session two." }] }
+        ]);
+
+        await using FakeApiClientServer server = await FakeApiClientServer.StartAsync(
+            new Dictionary<string, string>
+            {
+                [expectedRequestOne.ToJson()] = sessionOneResponseBody,
+                [expectedRequestTwo.ToJson()] = sessionTwoResponseBody
+            });
+
+        Session sessionOne = new Session(new ApiClient(server.Client))
+        {
+            ChatCompletionsUrl = server.ChatCompletionsUri,
+            Model = "gpt-5-nano",
+            PromptCacheKey = "tests-concurrent-1",
+            ReasoningEffort = ReasoningEffort.Minimal,
+            Verbosity = Verbosity.Low,
+            ServiceTier = ServiceTier.Default
+        };
+        sessionOne.AddMessage(new ChatCompletionDeveloperMessageParam { Content = "You are assistant one." });
+
+        Session sessionTwo = new Session(new ApiClient(server.Client))
+        {
+            ChatCompletionsUrl = server.ChatCompletionsUri,
+            Model = "gpt-5-nano",
+            PromptCacheKey = "tests-concurrent-2",
+            ReasoningEffort = ReasoningEffort.Minimal,
+            Verbosity = Verbosity.Low,
+            ServiceTier = ServiceTier.Default
+        };
+        sessionTwo.AddMessage(new ChatCompletionDeveloperMessageParam { Content = "You are assistant two." });
+
+        ChatCompletionUserMessageParam sessionOneMessage = new ChatCompletionUserMessageParam
+        {
+            Content = [new ChatCompletionContentPartText { Text = "Message for session one." }]
+        };
+        ChatCompletionUserMessageParam sessionTwoMessage = new ChatCompletionUserMessageParam
+        {
+            Content = [new ChatCompletionContentPartText { Text = "Message for session two." }]
+        };
+
+        // Act
+        Task<ChatCompletionMessage> sessionOneTurn = sessionOne.RunTurnAsync(sessionOneMessage, CancellationToken.None);
+        Task<ChatCompletionMessage> sessionTwoTurn = sessionTwo.RunTurnAsync(sessionTwoMessage, CancellationToken.None);
+        ChatCompletionMessage[] responses = await Task.WhenAll(sessionOneTurn, sessionTwoTurn);
+
+        // Assert
+        Assert.Equal("Session one response.", responses[0].Content);
+        Assert.Equal("Session two response.", responses[1].Content);
+
+        IReadOnlyList<RawRequestReady> sessionOneRawRequests = Events.GetEventsForSession<RawRequestReady>(sessionOne.Id);
+        IReadOnlyList<RawRequestReady> sessionTwoRawRequests = Events.GetEventsForSession<RawRequestReady>(sessionTwo.Id);
+        Assert.Single(sessionOneRawRequests);
+        Assert.Single(sessionTwoRawRequests);
+        Assert.Equal(expectedRequestOne.ToJson(), sessionOneRawRequests[0].RawRequest);
+        Assert.Equal(expectedRequestTwo.ToJson(), sessionTwoRawRequests[0].RawRequest);
+
+        Assert.Equal(11, sessionOne.TotalInputTokens);
+        Assert.Equal(1, sessionOne.TotalCachedInputTokens);
+        Assert.Equal(4, sessionOne.TotalOutputTokens);
+        Assert.Equal(1, sessionOne.TotalReasoningOutputTokens);
+
+        Assert.Equal(13, sessionTwo.TotalInputTokens);
+        Assert.Equal(2, sessionTwo.TotalCachedInputTokens);
+        Assert.Equal(5, sessionTwo.TotalOutputTokens);
+        Assert.Equal(2, sessionTwo.TotalReasoningOutputTokens);
+    }
+
+    private sealed class StaticGetCurrentTimeTool : ChatCompletionFunctionTool
+    {
+        private readonly string _fixedIsoTime;
+
+        [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+        public StaticGetCurrentTimeTool(string fixedIsoTime)
+        {
+            _fixedIsoTime = fixedIsoTime;
+            Name = "get_current_time";
+            Description = "Get the current time in ISO 8601 format for a specified timezone.";
+            Strict = true;
+            Parameters.Add(new FunctionToolParameter
+            {
+                Name = "timezone",
+                Description = "The IANA timezone identifier (e.g., 'America/New_York'). If not provided, defaults to UTC.",
+                Type = FunctionToolCallParameterType.String
+            });
+        }
+
+        public override async Task<string> ExecuteAsync(string argumentsJson)
+        {
+            await Task.CompletedTask;
+            return _fixedIsoTime;
+        }
     }
 }

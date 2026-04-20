@@ -10,6 +10,7 @@ This repo is a minimal, general-purpose, tool-using agent harness. It was create
 - Don’t use fancy techniques which obscure the core concepts.
 - Write comments for key sections of code, and always use British English.
 - Declare constants if it makes the code more understandable e.g. magic values.
+- Prefer explicit types in variable declarations instead of 'var'.
 
 ## UX
 - Style the UI inspired by OpenAI's style (light theme).

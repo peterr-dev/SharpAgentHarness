@@ -1,83 +1,71 @@
 using System.Text.Json;
-using Core;
+using Core.ChatCompletions;
 
-namespace Tools
+public sealed class GetCurrentTimeTool : ChatCompletionFunctionTool
 {
-
-    /// <summary>
-    /// Example tool that returns the current time in ISO 8601 format.
-    /// </summary>
-    public sealed class GetCurrentTimeTool : Tool
+    [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
+    public GetCurrentTimeTool() : base()
     {
-        [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
-        public GetCurrentTimeTool()
+        Name = "get_current_time";
+        Description = "Get the current time in ISO 8601 format for a specified timezone.";
+        Strict = true;
+        Parameters.Add(new FunctionToolParameter
         {
-            Name = "get_current_time";
-            Description = "Get the current time in ISO 8601 format for a specified timezone.";
+            Name = "timezone",
+            Description = "The IANA timezone identifier (e.g., 'America/New_York'). If not provided, defaults to UTC.",
+            Type = FunctionToolCallParameterType.String
+        });
+    }
 
-            Parameters =
-            [
-                new ToolParameter
-                {
-                    Name = "timezone",
-                    Kind = ToolValueKind.String,
-                    Description = "IANA or system timezone ID (for example, 'UTC' or 'America/New_York').",
-                    Nullable = true
-                }
-            ];
+    public override async Task<string> ExecuteAsync(string argumentsJson)
+    {
+        string timezone = ExtractTimezone(argumentsJson) ?? "UTC";
+
+        TimeZoneInfo zone = ResolveTimeZone(timezone);
+        DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
+        DateTimeOffset localTime = TimeZoneInfo.ConvertTime(nowUtc, zone);
+
+        string isoTime = localTime.ToString("O");
+        return isoTime;
+    }
+
+    private static string? ExtractTimezone(string argumentsJson)
+    {
+        if (string.IsNullOrWhiteSpace(argumentsJson))
+        {
+            return null;
         }
 
-        public override Task<string> ExecuteAsync(string argumentsJson)
+        using JsonDocument doc = JsonDocument.Parse(argumentsJson);
+        JsonElement root = doc.RootElement;
+
+        if (!root.TryGetProperty("timezone", out JsonElement timezoneElement))
         {
-            string timezone = ExtractTimezone(argumentsJson) ?? "UTC";
-
-            TimeZoneInfo zone = ResolveTimeZone(timezone);
-            DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
-            DateTimeOffset localTime = TimeZoneInfo.ConvertTime(nowUtc, zone);
-
-            string isoTime = localTime.ToString("O");
-            return Task.FromResult(isoTime);
+            return null;
         }
 
-        private static string? ExtractTimezone(string argumentsJson)
+        if (timezoneElement.ValueKind != JsonValueKind.String)
         {
-            if (string.IsNullOrWhiteSpace(argumentsJson))
-            {
-                return null;
-            }
-
-            using JsonDocument doc = JsonDocument.Parse(argumentsJson);
-            JsonElement root = doc.RootElement;
-
-            if (!root.TryGetProperty("timezone", out JsonElement timezoneElement))
-            {
-                return null;
-            }
-
-            if (timezoneElement.ValueKind != JsonValueKind.String)
-            {
-                return null;
-            }
-
-            string? timezone = timezoneElement.GetString();
-            return string.IsNullOrWhiteSpace(timezone) ? null : timezone;
+            return null;
         }
 
-        private static TimeZoneInfo ResolveTimeZone(string timezone)
+        string? timezone = timezoneElement.GetString();
+        return string.IsNullOrWhiteSpace(timezone) ? null : timezone;
+    }
+
+    private static TimeZoneInfo ResolveTimeZone(string timezone)
+    {
+        try
         {
-            // Fall back to UTC for unknown timezone IDs to keep the tool simple.
-            try
-            {
-                return TimeZoneInfo.FindSystemTimeZoneById(timezone);
-            }
-            catch (TimeZoneNotFoundException)
-            {
-                return TimeZoneInfo.Utc;
-            }
-            catch (InvalidTimeZoneException)
-            {
-                return TimeZoneInfo.Utc;
-            }
+            return TimeZoneInfo.FindSystemTimeZoneById(timezone);
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return TimeZoneInfo.Utc;
+        }
+        catch (InvalidTimeZoneException)
+        {
+            return TimeZoneInfo.Utc;
         }
     }
 }

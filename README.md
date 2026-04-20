@@ -7,7 +7,7 @@ A minimal, general-purpose agent harness written in C#/.NET, providing a foundat
 - A REST API for interacting with the agent harness.
 - Support for function tools organised into named toolkits.
 - Event tracing for visibility of session activity.
-- A typed wrapper around a pragmatic subset of the OpenAI Responses API.
+- A typed wrapper around a pragmatic subset of the Chat Completions API.
 - A lightweight Web UI for interacting with the agent harness API.
 
 ## Project Structure
@@ -21,7 +21,7 @@ A minimal, general-purpose agent harness written in C#/.NET, providing a foundat
 - `Turn` - orchestrates a single turn within a `Session`, starting from a user message, handling any resulting tool calls and tool results, and returning the final output message.
 - `Hook` - called at key points in the `Turn` lifecycle, enabling observation, mutation or abandonment of agent activities.
 - `Event` - models session-scoped events used for tracing turn execution, LLM requests and responses, and tool activity.
-- `Llm` - wraps communication with the OpenAI Responses API in terms of `LlmRequest` and `LlmResponse`, which model a strongly typed, pragmatic subset of the OpenAI Responses API.
+- `ApiClient` - wraps communication with a Chat Completions-compatible API in terms of strongly typed `Request` and `Response` classes.
 
 The repo also contains a `Tests` project with a small set of integration-style tests for verifying specific behaviours of the harness, such as prompt caching.  
 
@@ -29,8 +29,7 @@ The repo also contains a `Tests` project with a small set of integration-style t
 
 The harness takes an intentionally opinionated approach:
 
-- Only a non-streaming subset of OpenAI's Responses API is currently supported.
-- `previous_response_id` is used to simplify conversational state handling.
+- Only a non-streaming subset of the CHat Completions API is currently supported.
 - `Tools` are organised into named `Toolkits`.
 - Each `Session` selects one `Toolkit` up front, and those tools are provided to the LLM on each turn.
 - `strict` mode is always used for function tools, in line with OpenAI guidance.
@@ -121,7 +120,7 @@ Example request body:
   "instructions": "You are a helpful assistant.",
   "promptCacheKey": "SharpAgentHarness",
   "tier": "Auto",
-  "reasoning": "Low",
+  "reasoning": "Minimal",
   "verbosity": "Low",
   "toolkit": "Default"
 }
@@ -137,7 +136,6 @@ Example response body:
   "promptCacheKey": "SharpAgentHarness",
   "reasoning": "Low",
   "verbosity": "Low",
-  "previousResponseId": null,
   "instructions": "You are a helpful assistant.",
   "toolkitName": "Default",
   "usageTotals": {
@@ -190,7 +188,7 @@ If the session doesn't exist, the API returns `404 Not Found`.
 This project is intentionally narrow in scope:
 
 - Sessions and events are stored in memory only.
-- Only a (non-streaming) subset of OpenAI's Responses API is supported.
+- Only a (non-streaming) subset of the Chat Completions API is supported.
 - Tool selection happens on session creation, rather than dynamically per turn.
 - Tests are minimal and focused on core aspects of harness behaviour.
 - The `Agent` project also hosts the Web UI.
@@ -203,9 +201,7 @@ Potential future explorations and improvements include:
 
 - Experimental implementations of agentic concepts and tools relevant to business applications, such as memory, subagents, long-horizon tasks and Recursive Language Models (RLMs).
 - Persistent storage for sessions and events.
-- Support for Chat Completions-compatible APIs.
-- Streaming response support.
-- API authentication and rate limiting.
+- Authentication and rate limiting for the agent's API.
 
 ## License
 

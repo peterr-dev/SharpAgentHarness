@@ -129,9 +129,9 @@ function getCachedInputTokens(responseText) {
     // The API has several response shapes; inspect each common shape in priority order.
     const candidates = [
       parsed?.usageTotals?.cachedInputTokens,
+      parsed?.details?.session?.usageTotals?.cachedInputTokens,
       parsed?.usage?.cachedInputTokens,
-      parsed?.details?.response?.usage?.cachedInputTokens,
-      parsed?.details?.session?.usageTotals?.cachedInputTokens
+      parsed?.details?.response?.usage?.cachedInputTokens
     ];
 
     for (const candidate of candidates) {
@@ -144,8 +144,8 @@ function getCachedInputTokens(responseText) {
     if (Array.isArray(parsed)) {
       for (let index = parsed.length - 1; index >= 0; index -= 1) {
         const item = parsed[index];
-        const eventCachedTokens = item?.details?.response?.usage?.cachedInputTokens
-          ?? item?.details?.session?.usageTotals?.cachedInputTokens;
+        const eventCachedTokens = item?.details?.session?.usageTotals?.cachedInputTokens
+          ?? item?.details?.response?.usage?.cachedInputTokens;
 
         if (typeof eventCachedTokens === 'number' && Number.isFinite(eventCachedTokens) && eventCachedTokens >= 0) {
           return eventCachedTokens;

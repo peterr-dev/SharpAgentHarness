@@ -1,49 +1,68 @@
-using System.Text.Json.Serialization;
-using Core.Llm;
+using Core.ChatCompletions;
 
 namespace Core
 {
-    public interface ISessionEvent
+    public abstract class Event
     {
-        Session Session { get; }
+        public Session Session { get; }
+
+        protected Event(Session session)
+        {
+            Session = session ?? throw new ArgumentNullException(nameof(session));
+        }
     }
 
-    public sealed record TurnStarted([property: JsonIgnore] Session session) : ISessionEvent
+    public sealed class TurnStarted : Event
     {
-        public Session Session => session;
+        public TurnStarted(Session session) : base(session) { }
     }
 
-    public sealed record LlmRequestReady([property: JsonIgnore] Session session, Request req) : ISessionEvent
+    public sealed class RequestReady : Event
     {
-        public Session Session => session;
+        public Request Request { get; }
+
+        public RequestReady(Session session, Request request) : base(session)
+        {
+            Request = request ?? throw new ArgumentNullException(nameof(request));
+        }
     }
 
-    public sealed record RawLlmRequestReady([property: JsonIgnore] Session session, [property: JsonIgnore] HttpRequestMessage req, string requestBody) : ISessionEvent
+    public sealed class ResponseReceived : Event
     {
-        public Session Session => session;
+        public Response Response { get; }
+
+        public ResponseReceived(Session session, Response response) : base(session)
+        {
+            Response = response ?? throw new ArgumentNullException(nameof(response));
+        }
     }
 
-    public sealed record LlmResponseReceived([property: JsonIgnore] Session session, Response resp) : ISessionEvent
+    public sealed class RawRequestReady : Event
     {
-        public Session Session => session;
+        public string RawRequest { get; }
+
+        public RawRequestReady(Session session, string rawRequest) : base(session)
+        {
+            RawRequest = rawRequest ?? throw new ArgumentNullException(nameof(rawRequest));
+        }
     }
 
-    public sealed record ToolCallRequested([property: JsonIgnore] Session session, ResponseOutputItemFunctionCall toolCall) : ISessionEvent
+    public sealed class RawResponseReceived : Event
     {
-        public Session Session => session;
+        public string RawResponse { get; }
+
+        public RawResponseReceived(Session session, string rawResponse) : base(session)
+        {
+            RawResponse = rawResponse ?? throw new ArgumentNullException(nameof(rawResponse));
+        }
     }
 
-    public sealed record ToolCallCompleted([property: JsonIgnore] Session session, ResponseOutputItemFunctionCall toolCall, string resultText) : ISessionEvent
+    public sealed class TurnCompleted : Event
     {
-        public Session Session => session;
+        public TurnCompleted(Session session) : base(session) { }
     }
 
-    public sealed record TurnCompleted([property: JsonIgnore] Session session) : ISessionEvent
-    {
-        public Session Session => session;
-    }
-
-    public static class EventTraces
+    public static class Events
     {
         private static readonly List<object> _events = new();
         private static readonly object _lock = new();
@@ -74,32 +93,32 @@ namespace Core
             }
         }
 
-        public static IReadOnlyList<ISessionEvent> GetEventsForSession(Session session)
+        public static IReadOnlyList<Event> GetEventsForSession(Session session)
         {
             if (session is null) throw new ArgumentNullException(nameof(session));
 
             return GetEventsForSession(session.Id);
         }
 
-        public static IReadOnlyList<ISessionEvent> GetEventsForSession(Guid sessionId)
+        public static IReadOnlyList<Event> GetEventsForSession(Guid sessionId)
         {
             lock (_lock)
             {
                 return _events
-                    .OfType<ISessionEvent>()
+                    .OfType<Event>()
                     .Where(evt => evt.Session.Id == sessionId)
                     .ToList();
             }
         }
 
-        public static IReadOnlyList<TEvent> GetEventsForSession<TEvent>(Session session) where TEvent : ISessionEvent
+        public static IReadOnlyList<TEvent> GetEventsForSession<TEvent>(Session session) where TEvent : Event
         {
             if (session is null) throw new ArgumentNullException(nameof(session));
 
             return GetEventsForSession<TEvent>(session.Id);
         }
 
-        public static IReadOnlyList<TEvent> GetEventsForSession<TEvent>(Guid sessionId) where TEvent : ISessionEvent
+        public static IReadOnlyList<TEvent> GetEventsForSession<TEvent>(Guid sessionId) where TEvent : Event
         {
             lock (_lock)
             {
@@ -107,14 +126,6 @@ namespace Core
                     .OfType<TEvent>()
                     .Where(evt => evt.Session.Id == sessionId)
                     .ToList();
-            }
-        }
-
-        public static void Clear()
-        {
-            lock (_lock)
-            {
-                _events.Clear();
             }
         }
     }
