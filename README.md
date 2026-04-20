@@ -29,7 +29,7 @@ The repo also contains a `Tests` project with a small set of integration-style t
 
 The harness takes an intentionally opinionated approach:
 
-- Only a non-streaming subset of the CHat Completions API is currently supported.
+- Only a non-streaming subset of the Chat Completions API is currently supported.
 - `Tools` are organised into named `Toolkits`.
 - Each `Session` selects one `Toolkit` up front, and those tools are provided to the LLM on each turn.
 - `strict` mode is always used for function tools, in line with OpenAI guidance.
