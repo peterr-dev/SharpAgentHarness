@@ -23,7 +23,7 @@ namespace Core
 
         public Guid Id { get; } = Guid.NewGuid();
 
-        public Uri ChatCompletionsUrl { get; init; } = new Uri("https://api.openai.com/v1/chat/completions");
+        public Uri ChatCompletionsUrl { get; init; } = new Uri(ApiClient.OpenAIChatCompletionsUrl);
 
         public required string Model { get; init; }
 

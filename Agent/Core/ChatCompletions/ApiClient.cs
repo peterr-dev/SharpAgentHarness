@@ -4,7 +4,10 @@ namespace Core.ChatCompletions
 {
     public class ApiClient
     {
+        public const string OpenAIChatCompletionsUrl = "https://api.openai.com/v1/chat/completions";
+        
         private static readonly HttpClient defaultHttpClient = new HttpClient();
+
         private readonly HttpClient _httpClient;
 
         public ApiClient() : this(defaultHttpClient)

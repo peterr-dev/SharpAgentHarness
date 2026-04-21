@@ -11,6 +11,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 var app = builder.Build();
 app.UseHttpsRedirection();
 app.UseStaticFiles();
+app.MapGet("/favicon.ico", () => Results.Redirect("/favicon.svg", permanent: false));
 
 // Default session configuration.
 const string DefaultModel = "gpt-5-nano";
@@ -44,7 +45,11 @@ app.MapPost("/api/sessions", (CreateSessionRequest? body) =>
             Verbosity = body?.Verbosity ?? DefaultVerbosity,
             Toolkit = string.IsNullOrEmpty(body?.ToolkitName) ? defaultToolkit : Toolkits.Get(body.ToolkitName)
         };
-        session.AddMessage(new ChatCompletionDeveloperMessageParam { Content = body?.Instructions ?? DefaultInstructions });
+        session.AddMessage(new ChatCompletionDeveloperMessageParam 
+        { 
+            UseDeveloperMessageInsteadOfSystem = session.ChatCompletionsUrl.ToString() == ApiClient.OpenAIChatCompletionsUrl,
+            Content = body?.Instructions ?? DefaultInstructions
+        });
         Sessions.CreateSession(session);
         return Results.Ok(MapSessionForApi(session));
     }

@@ -79,7 +79,11 @@ public class HarnessTests
         };
         Request expectedRequest = session.CreateRequest(
         [
-            new ChatCompletionDeveloperMessageParam { Content = "You are a test assistant." },
+            new ChatCompletionDeveloperMessageParam 
+            {
+                UseDeveloperMessageInsteadOfSystem = true,
+                Content = "You are a test assistant."
+            },
             userMessage
         ]);
         string expectedRequestBody = expectedRequest.ToJson();
@@ -99,7 +103,11 @@ public class HarnessTests
             Verbosity = Verbosity.Low,
             ServiceTier = ServiceTier.Default
         };
-        session.AddMessage(new ChatCompletionDeveloperMessageParam { Content = "You are a test assistant." });
+        session.AddMessage(new ChatCompletionDeveloperMessageParam 
+        { 
+            UseDeveloperMessageInsteadOfSystem = true,
+            Content = "You are a test assistant."
+        });
         Sessions.CreateSession(session);
 
         // Act
@@ -139,9 +147,9 @@ public class HarnessTests
         const string expectedRequest3Body = """{"model":"gpt-5-nano","prompt_cache_key":"tests-e2e-multiturn","messages":[{"role":"developer","content":"You are a concise test assistant."},{"role":"user","content":[{"type":"text","text":"Hi"}]},{"role":"assistant","content":[{"type":"text","text":"Hello!"}]},{"role":"user","content":[{"type":"text","text":"What is the current time in UTC?"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_utc_1","type":"function","function":{"name":"get_current_time","arguments":"{\u0022timezone\u0022:\u0022UTC\u0022}"}}]},{"role":"tool","tool_call_id":"call_utc_1","content":"2026-04-20T12:34:56.0000000\u002B00:00"}],"reasoning_effort":"minimal","verbosity":"low","service_tier":"default","tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}]}""";
         const string expectedRequest4Body = """{"model":"gpt-5-nano","prompt_cache_key":"tests-e2e-multiturn","messages":[{"role":"developer","content":"You are a concise test assistant."},{"role":"user","content":[{"type":"text","text":"Hi"}]},{"role":"assistant","content":[{"type":"text","text":"Hello!"}]},{"role":"user","content":[{"type":"text","text":"What is the current time in UTC?"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_utc_1","type":"function","function":{"name":"get_current_time","arguments":"{\u0022timezone\u0022:\u0022UTC\u0022}"}}]},{"role":"tool","tool_call_id":"call_utc_1","content":"2026-04-20T12:34:56.0000000\u002B00:00"},{"role":"assistant","content":[{"type":"text","text":"The current UTC time is 2026-04-20T12:34:56.0000000\u002B00:00."}]},{"role":"user","content":[{"type":"text","text":"Thanks"}]}],"reasoning_effort":"minimal","verbosity":"low","service_tier":"default","tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}]}""";
         const string response1Body = """{"id":"chatcmpl_test_multiturn_1","object":"chat.completion","created":1710001001,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"Hello!","refusal":""}}],"usage":{"prompt_tokens":20,"completion_tokens":4,"total_tokens":24,"prompt_tokens_details":{"cached_tokens":2},"completion_tokens_details":{"reasoning_tokens":1}}}""";
-            const string response2Body = """{"id":"chatcmpl_test_multiturn_2","object":"chat.completion","created":1710001002,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"tool_calls","message":{"role":"assistant","content":null,"refusal":"","tool_calls":[{"id":"call_utc_1","type":"function","function":{"name":"get_current_time","arguments":"{\"timezone\":\"UTC\"}"}}]}}],"usage":{"prompt_tokens":34,"completion_tokens":9,"total_tokens":43,"prompt_tokens_details":{"cached_tokens":3},"completion_tokens_details":{"reasoning_tokens":2}}}""";
-            const string response3Body = """{"id":"chatcmpl_test_multiturn_3","object":"chat.completion","created":1710001003,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"The current UTC time is 2026-04-20T12:34:56.0000000+00:00.","refusal":""}}],"usage":{"prompt_tokens":46,"completion_tokens":12,"total_tokens":58,"prompt_tokens_details":{"cached_tokens":4},"completion_tokens_details":{"reasoning_tokens":3}}}""";
-            const string response4Body = """{"id":"chatcmpl_test_multiturn_4","object":"chat.completion","created":1710001004,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"You are welcome.","refusal":""}}],"usage":{"prompt_tokens":52,"completion_tokens":5,"total_tokens":57,"prompt_tokens_details":{"cached_tokens":5},"completion_tokens_details":{"reasoning_tokens":1}}}""";
+        const string response2Body = """{"id":"chatcmpl_test_multiturn_2","object":"chat.completion","created":1710001002,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"tool_calls","message":{"role":"assistant","content":null,"refusal":"","tool_calls":[{"id":"call_utc_1","type":"function","function":{"name":"get_current_time","arguments":"{\"timezone\":\"UTC\"}"}}]}}],"usage":{"prompt_tokens":34,"completion_tokens":9,"total_tokens":43,"prompt_tokens_details":{"cached_tokens":3},"completion_tokens_details":{"reasoning_tokens":2}}}""";
+        const string response3Body = """{"id":"chatcmpl_test_multiturn_3","object":"chat.completion","created":1710001003,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"The current UTC time is 2026-04-20T12:34:56.0000000+00:00.","refusal":""}}],"usage":{"prompt_tokens":46,"completion_tokens":12,"total_tokens":58,"prompt_tokens_details":{"cached_tokens":4},"completion_tokens_details":{"reasoning_tokens":3}}}""";
+        const string response4Body = """{"id":"chatcmpl_test_multiturn_4","object":"chat.completion","created":1710001004,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"You are welcome.","refusal":""}}],"usage":{"prompt_tokens":52,"completion_tokens":5,"total_tokens":57,"prompt_tokens_details":{"cached_tokens":5},"completion_tokens_details":{"reasoning_tokens":1}}}""";
 
             Session requestSession = new Session
             {
@@ -156,19 +164,31 @@ public class HarnessTests
 
             Request request1 = requestSession.CreateRequest(
             [
-                new ChatCompletionDeveloperMessageParam { Content = "You are a concise test assistant." },
+                new ChatCompletionDeveloperMessageParam 
+                { 
+                    UseDeveloperMessageInsteadOfSystem = true,
+                    Content = "You are a concise test assistant."
+                },
                 new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hi" }] }
             ]);
             Request request2 = requestSession.CreateRequest(
             [
-                new ChatCompletionDeveloperMessageParam { Content = "You are a concise test assistant." },
+                new ChatCompletionDeveloperMessageParam 
+                { 
+                    UseDeveloperMessageInsteadOfSystem = true,
+                    Content = "You are a concise test assistant."
+                },
                 new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hi" }] },
                 new ChatCompletionAssistantMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hello!" }] },
                 new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "What is the current time in UTC?" }] }
             ]);
             Request request3 = requestSession.CreateRequest(
             [
-                new ChatCompletionDeveloperMessageParam { Content = "You are a concise test assistant." },
+                new ChatCompletionDeveloperMessageParam 
+                { 
+                    UseDeveloperMessageInsteadOfSystem = true,
+                    Content = "You are a concise test assistant."
+                },
                 new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hi" }] },
                 new ChatCompletionAssistantMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hello!" }] },
                 new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "What is the current time in UTC?" }] },
@@ -193,7 +213,11 @@ public class HarnessTests
             ]);
             Request request4 = requestSession.CreateRequest(
             [
-                new ChatCompletionDeveloperMessageParam { Content = "You are a concise test assistant." },
+                new ChatCompletionDeveloperMessageParam 
+                { 
+                    UseDeveloperMessageInsteadOfSystem = true,
+                    Content = "You are a concise test assistant."
+                },
                 new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hi" }] },
                 new ChatCompletionAssistantMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hello!" }] },
                 new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "What is the current time in UTC?" }] },
@@ -245,7 +269,7 @@ public class HarnessTests
                 ServiceTier = ServiceTier.Default,
                 Toolkit = toolkit
             };
-            session.AddMessage(new ChatCompletionDeveloperMessageParam { Content = "You are a concise test assistant." });
+            session.AddMessage(new ChatCompletionDeveloperMessageParam { UseDeveloperMessageInsteadOfSystem = true, Content = "You are a concise test assistant." });
             Sessions.CreateSession(session);
 
             ChatCompletionUserMessageParam hiMessage = new ChatCompletionUserMessageParam
@@ -335,12 +359,12 @@ public class HarnessTests
         };
         Request expectedFirstRequest = expectedRequestSession.CreateRequest(
         [
-            new ChatCompletionDeveloperMessageParam { Content = "You are a concise test assistant." },
+            new ChatCompletionDeveloperMessageParam { UseDeveloperMessageInsteadOfSystem = true, Content = "You are a concise test assistant." },
             new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hello" }] }
         ]);
         Request expectedSecondRequest = expectedRequestSession.CreateRequest(
         [
-            new ChatCompletionDeveloperMessageParam { Content = "You are a concise test assistant." },
+            new ChatCompletionDeveloperMessageParam { UseDeveloperMessageInsteadOfSystem = true, Content = "You are a concise test assistant." },
             new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hello" }] },
             new ChatCompletionAssistantMessageParam { Content = [new ChatCompletionContentPartText { Text = "Visible answer." }] },
             new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "And now?" }] }
@@ -362,7 +386,7 @@ public class HarnessTests
             Verbosity = Verbosity.Low,
             ServiceTier = ServiceTier.Default
         };
-        session.AddMessage(new ChatCompletionDeveloperMessageParam { Content = "You are a concise test assistant." });
+        session.AddMessage(new ChatCompletionDeveloperMessageParam { UseDeveloperMessageInsteadOfSystem = true, Content = "You are a concise test assistant." });
 
         ChatCompletionUserMessageParam firstUserMessage = new ChatCompletionUserMessageParam
         {
@@ -414,12 +438,12 @@ public class HarnessTests
 
         Request expectedRequestOne = expectedSessionOne.CreateRequest(
         [
-            new ChatCompletionDeveloperMessageParam { Content = "You are assistant one." },
+            new ChatCompletionDeveloperMessageParam { UseDeveloperMessageInsteadOfSystem = true, Content = "You are assistant one." },
             new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Message for session one." }] }
         ]);
         Request expectedRequestTwo = expectedSessionTwo.CreateRequest(
         [
-            new ChatCompletionDeveloperMessageParam { Content = "You are assistant two." },
+            new ChatCompletionDeveloperMessageParam { UseDeveloperMessageInsteadOfSystem = true, Content = "You are assistant two." },
             new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Message for session two." }] }
         ]);
 
@@ -439,7 +463,11 @@ public class HarnessTests
             Verbosity = Verbosity.Low,
             ServiceTier = ServiceTier.Default
         };
-        sessionOne.AddMessage(new ChatCompletionDeveloperMessageParam { Content = "You are assistant one." });
+        sessionOne.AddMessage(new ChatCompletionDeveloperMessageParam 
+        { 
+            UseDeveloperMessageInsteadOfSystem = true, 
+            Content = "You are assistant one." 
+        });
 
         Session sessionTwo = new Session(new ApiClient(server.Client))
         {
@@ -450,7 +478,11 @@ public class HarnessTests
             Verbosity = Verbosity.Low,
             ServiceTier = ServiceTier.Default
         };
-        sessionTwo.AddMessage(new ChatCompletionDeveloperMessageParam { Content = "You are assistant two." });
+        sessionTwo.AddMessage(new ChatCompletionDeveloperMessageParam 
+        { 
+            UseDeveloperMessageInsteadOfSystem = true,
+            Content = "You are assistant two." 
+        });
 
         ChatCompletionUserMessageParam sessionOneMessage = new ChatCompletionUserMessageParam
         {

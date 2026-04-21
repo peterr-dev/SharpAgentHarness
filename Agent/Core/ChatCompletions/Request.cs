@@ -162,11 +162,13 @@ namespace Core.ChatCompletions
     {
         public required string Content { get; init; }
 
+        public required bool UseDeveloperMessageInsteadOfSystem { get; init; }
+
         public override JsonObject ToJson()
         {
             return new JsonObject
             {
-                ["role"] = "developer",
+                ["role"] = UseDeveloperMessageInsteadOfSystem ? "developer" : "system",
                 ["content"] = Content
             };
         }
