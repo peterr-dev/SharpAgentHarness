@@ -5,24 +5,30 @@ const requestDefinitions = {
     fields: [
       { key: 'model', label: 'Model', type: 'text', placeholder: 'gpt-5-nano', defaultValue: 'gpt-5-nano' },
       { key: 'instructions', label: 'Instructions', type: 'textarea', placeholder: 'You are a helpful assistant.', defaultValue: 'You are a helpful assistant.' },
-      { key: 'promptCacheKey', label: 'Prompt cache key', type: 'text', placeholder: 'SharpAgentHarness', defaultValue: 'SharpAgentHarness' },
+      {
+        key: 'chatCompletionsUrl',
+        label: 'Chat Completions URL',
+        type: 'text',
+        placeholder: 'https://api.openai.com/v1/chat/completions',
+      },
+      { key: 'promptCacheKey', label: 'Prompt Cache Key', type: 'text', placeholder: 'SharpAgentHarness', defaultValue: 'SharpAgentHarness' },
       {
         key: 'tier',
-        label: 'Service tier',
+        label: 'Service Tier',
         type: 'select',
         options: ['Auto', 'Default', 'Flex', 'Priority'],
         defaultValue: 'Auto'
       },
       {
         key: 'reasoning',
-        label: 'Reasoning effort',
+        label: 'Reasoning Effort',
         type: 'select',
         options: ['None', 'Minimal', 'Low', 'Medium', 'High', 'XHigh'],
         defaultValue: 'Minimal'
       },
       {
         key: 'verbosity',
-        label: 'Text verbosity',
+        label: 'Text Verbosity',
         type: 'select',
         options: ['Low', 'Medium', 'High'],
         defaultValue: 'Low'
@@ -58,6 +64,8 @@ const statusPill = document.getElementById('statusPill');
 const cachePill = document.getElementById('cachePill');
 const responseBody = document.getElementById('responseBody');
 const copyBtn = document.getElementById('copyBtn');
+
+const openAiHostedOnlyFieldKeys = ['model', 'promptCacheKey', 'tier', 'reasoning', 'verbosity'];
 
 
 // Keep track of the most recently created session so follow-up calls are quicker to fill in.
@@ -159,6 +167,45 @@ function getCachedInputTokens(responseText) {
   return null;
 }
 
+function isLocalChatCompletionsUrl(urlValue) {
+  if (!urlValue) {
+    return false;
+  }
+
+  const trimmedValue = urlValue.trim();
+
+  if (/^(localhost|127\.0\.0\.1|\[::1\]|::1)(:\d+)?(\/.*)?$/i.test(trimmedValue)) {
+    return true;
+  }
+
+  try {
+    const parsedUrl = new URL(trimmedValue);
+    const hostname = parsedUrl.hostname.toLowerCase();
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]';
+  } catch {
+    return false;
+  }
+}
+
+function updateCreateSessionFieldVisibility() {
+  if (requestTypeSelect.value !== 'create-session') {
+    return;
+  }
+
+  const chatCompletionsUrlField = dynamicFields.querySelector('[data-field="chatCompletionsUrl"]');
+  const usesLocalChatCompletionsUrl = chatCompletionsUrlField
+    ? isLocalChatCompletionsUrl(chatCompletionsUrlField.value.trim())
+    : false;
+
+  openAiHostedOnlyFieldKeys.forEach((fieldKey) => {
+    const row = dynamicFields.querySelector(`[data-field-row="${fieldKey}"]`);
+
+    if (row) {
+      row.classList.toggle('is-hidden', usesLocalChatCompletionsUrl);
+    }
+  });
+}
+
 function renderDynamicFields() {
   const definition = requestDefinitions[requestTypeSelect.value];
   dynamicFields.innerHTML = '';
@@ -166,6 +213,7 @@ function renderDynamicFields() {
   definition.fields.forEach((field) => {
     const row = document.createElement('div');
     row.className = `row ${field.type === 'textarea' ? 'row-top' : ''}`;
+    row.dataset.fieldRow = field.key;
 
     const label = document.createElement('label');
     label.textContent = field.label;
@@ -209,6 +257,14 @@ function renderDynamicFields() {
     row.appendChild(inputWrapper);
     dynamicFields.appendChild(row);
   });
+
+  const chatCompletionsUrlField = dynamicFields.querySelector('[data-field="chatCompletionsUrl"]');
+  if (chatCompletionsUrlField) {
+    chatCompletionsUrlField.addEventListener('input', updateCreateSessionFieldVisibility);
+    chatCompletionsUrlField.addEventListener('change', updateCreateSessionFieldVisibility);
+  }
+
+  updateCreateSessionFieldVisibility();
 
   populateSessionIdFieldIfAvailable();
 }
@@ -277,13 +333,16 @@ function buildRequest() {
 
   let payload;
   if (requestTypeSelect.value === 'create-session') {
+    const usesLocalChatCompletionsUrl = isLocalChatCompletionsUrl(values.chatCompletionsUrl);
+
     payload = {};
-    if (values.model) payload.model = values.model;
+    if (!usesLocalChatCompletionsUrl && values.model) payload.model = values.model;
     if (values.instructions) payload.instructions = values.instructions;
-    if (values.promptCacheKey) payload.promptCacheKey = values.promptCacheKey;
-    if (values.tier) payload.tier = values.tier;
-    if (values.reasoning) payload.reasoning = values.reasoning;
-    if (values.verbosity) payload.verbosity = values.verbosity;
+    if (values.chatCompletionsUrl) payload.chatCompletionsUrl = values.chatCompletionsUrl;
+    if (!usesLocalChatCompletionsUrl && values.promptCacheKey) payload.promptCacheKey = values.promptCacheKey;
+    if (!usesLocalChatCompletionsUrl && values.tier) payload.tier = values.tier;
+    if (!usesLocalChatCompletionsUrl && values.reasoning) payload.reasoning = values.reasoning;
+    if (!usesLocalChatCompletionsUrl && values.verbosity) payload.verbosity = values.verbosity;
   }
 
   if (requestTypeSelect.value === 'submit-message') {

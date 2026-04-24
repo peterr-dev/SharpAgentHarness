@@ -36,8 +36,11 @@ app.MapPost("/api/sessions", (CreateSessionRequest? body) =>
 {
     try
     {
+        Uri chatCompletionsUrl = ResolveChatCompletionsUrl(body?.ChatCompletionsUrl);
+
         Session session = new Session
         {
+            ChatCompletionsUrl = chatCompletionsUrl,
             Model = body?.Model ?? DefaultModel,
             PromptCacheKey = body?.PromptCacheKey ?? DefaultPromptCacheKey,
             ServiceTier = body?.Tier ?? DefaultTier,
@@ -140,6 +143,7 @@ static object MapSessionForApi(Session session)
     return new
     {
         id = session.Id,
+        chatCompletionsUrl = session.ChatCompletionsUrl.ToString(),
         model = session.Model,
         promptCacheKey = session.PromptCacheKey,
         tier = session.ServiceTier,
@@ -247,9 +251,25 @@ static object MapResponseForApi(Response response)
     };
 }
 
+static Uri ResolveChatCompletionsUrl(string? requestedUrl)
+{
+    if (string.IsNullOrWhiteSpace(requestedUrl))
+    {
+        return new Uri(ApiClient.OpenAIChatCompletionsUrl);
+    }
+
+    if (Uri.TryCreate(requestedUrl, UriKind.Absolute, out Uri? chatCompletionsUrl))
+    {
+        return chatCompletionsUrl;
+    }
+
+    throw new ArgumentException("ChatCompletionsUrl must be a valid absolute URL.", nameof(requestedUrl));
+}
+
 record CreateSessionRequest(
     string? Model,
     string? Instructions,
+    string? ChatCompletionsUrl,
     string? PromptCacheKey,
     ServiceTier? Tier,
     ReasoningEffort? Reasoning,
@@ -258,3 +278,7 @@ record CreateSessionRequest(
 );
 
 record SendMessageRequest(string message);
+
+public partial class Program
+{
+}

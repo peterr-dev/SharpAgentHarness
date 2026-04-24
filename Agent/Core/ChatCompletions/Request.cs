@@ -33,6 +33,8 @@ namespace Core.ChatCompletions
 
     public sealed class Request
     {
+        private readonly bool _includeOpenAiHostedParameters;
+
         public string Model { get; }
 
         public List<ChatCompletionMessageParam> Messages { get; } = new();
@@ -56,6 +58,7 @@ namespace Core.ChatCompletions
             if (session is null) throw new ArgumentNullException(nameof(session));
 
             Model = session.Model;
+            _includeOpenAiHostedParameters = session.ChatCompletionsUrl.ToString() == ApiClient.OpenAIChatCompletionsUrl;
             PromptCacheKey = session.PromptCacheKey;
             ReasoningEffort = session.ReasoningEffort;
             Verbosity = session.Verbosity;
@@ -74,13 +77,18 @@ namespace Core.ChatCompletions
 
             JsonObject body = new JsonObject
             {
-                ["model"] = Model,
-                ["prompt_cache_key"] = PromptCacheKey,
-                ["messages"] = new JsonArray(Messages.ConvertAll(m => (JsonNode?)m.ToJson()).ToArray()),
-                ["reasoning_effort"] = ReasoningEffort.ToString().ToLower(),
-                ["verbosity"] = Verbosity.ToString().ToLower(),
-                ["service_tier"] = ServiceTier.ToString().ToLower()
+                ["messages"] = new JsonArray(Messages.ConvertAll(m => (JsonNode?)m.ToJson()).ToArray())
             };
+
+            // Omit OpenAI-hosted-only request fields.
+            if (_includeOpenAiHostedParameters)
+            {
+                body["model"] = Model;
+                body["prompt_cache_key"] = PromptCacheKey;
+                body["reasoning_effort"] = ReasoningEffort.ToString().ToLower();
+                body["verbosity"] = Verbosity.ToString().ToLower();
+                body["service_tier"] = ServiceTier.ToString().ToLower();
+            }
 
             if (Temperature.HasValue)
                 body["temperature"] = Temperature.Value;

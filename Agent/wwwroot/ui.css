@@ -113,6 +113,10 @@ h1 {
   align-items: center;
 }
 
+.is-hidden {
+  display: none !important;
+}
+
 .row-top {
   align-items: start;
 }

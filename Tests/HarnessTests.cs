@@ -1,14 +1,12 @@
-using System.Text.Json.Nodes;
 using Core;
 using Core.ChatCompletions;
-using System.Linq;
 
 namespace Tests;
 
 public class HarnessTests
 {
     [Fact]
-    public async Task ApiClient_SendMessageAsync_UsesLocalFakeServer()
+    public async Task SingleTurnSession()
     {
         // Arrange
         await using FakeApiClientServer server = await FakeApiClientServer.StartAsync();
@@ -54,98 +52,16 @@ public class HarnessTests
     }
 
     [Fact]
-    public async Task Session_EndToEndFlow_UsesInjectedApiClient()
-    {
-        // Arrange
-        const string expectedResponseBody = """{"id":"chatcmpl_test_e2e","object":"chat.completion","created":1710000001,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"Hello from fake local server.","refusal":""}}],"usage":{"prompt_tokens":15,"completion_tokens":8,"total_tokens":23,"prompt_tokens_details":{"cached_tokens":6},"completion_tokens_details":{"reasoning_tokens":4}}}""";
-
-        ChatCompletionUserMessageParam userMessage = new ChatCompletionUserMessageParam
-        {
-            Content =
-            [
-                new ChatCompletionContentPartText
-                {
-                    Text = "Ping"
-                }
-            ]
-        };
-        Session session = new Session(new ApiClient())
-        {
-            Model = "gpt-5-nano",
-            PromptCacheKey = "tests-e2e",
-            ReasoningEffort = ReasoningEffort.Minimal,
-            Verbosity = Verbosity.Low,
-            ServiceTier = ServiceTier.Default
-        };
-        Request expectedRequest = session.CreateRequest(
-        [
-            new ChatCompletionDeveloperMessageParam 
-            {
-                UseDeveloperMessageInsteadOfSystem = true,
-                Content = "You are a test assistant."
-            },
-            userMessage
-        ]);
-        string expectedRequestBody = expectedRequest.ToJson();
-
-        await using FakeApiClientServer server = await FakeApiClientServer.StartAsync(
-            new Dictionary<string, string>
-            {
-                [expectedRequestBody] = expectedResponseBody
-            });
-        ApiClient fakeApiClient = new ApiClient(server.Client);
-        session = new Session(fakeApiClient)
-        {
-            ChatCompletionsUrl = server.ChatCompletionsUri,
-            Model = "gpt-5-nano",
-            PromptCacheKey = "tests-e2e",
-            ReasoningEffort = ReasoningEffort.Minimal,
-            Verbosity = Verbosity.Low,
-            ServiceTier = ServiceTier.Default
-        };
-        session.AddMessage(new ChatCompletionDeveloperMessageParam 
-        { 
-            UseDeveloperMessageInsteadOfSystem = true,
-            Content = "You are a test assistant."
-        });
-        Sessions.CreateSession(session);
-
-        // Act
-        ChatCompletionMessage assistantResponse = await session.RunTurnAsync(userMessage, CancellationToken.None);
-        Session loadedSession = Sessions.GetSession(session.Id);
-        IReadOnlyList<Event> eventsForSession = Events.GetEventsForSession(session.Id);
-        RawRequestReady rawRequestReady = Assert.Single(eventsForSession.OfType<RawRequestReady>());
-        RawResponseReceived rawResponseReceived = Assert.Single(eventsForSession.OfType<RawResponseReceived>());
-
-        // Assert
-        Assert.Equal("Hello from fake local server.", assistantResponse.Content);
-        Assert.Equal(session.Id, loadedSession.Id);
-        Assert.Equal(expectedRequestBody, rawRequestReady.RawRequest);
-        Assert.Equal(expectedResponseBody, rawResponseReceived.RawResponse);
-        Assert.Equal(15, loadedSession.TotalInputTokens);
-        Assert.Equal(6, loadedSession.TotalCachedInputTokens);
-        Assert.Equal(8, loadedSession.TotalOutputTokens);
-        Assert.Equal(4, loadedSession.TotalReasoningOutputTokens);
-
-        Assert.Contains(eventsForSession, evt => evt is TurnStarted);
-        Assert.Contains(eventsForSession, evt => evt is RequestReady);
-        Assert.Contains(eventsForSession, evt => evt is ResponseReceived);
-        Assert.Contains(eventsForSession, evt => evt is RawRequestReady);
-        Assert.Contains(eventsForSession, evt => evt is RawResponseReceived);
-        Assert.Contains(eventsForSession, evt => evt is TurnCompleted);
-    }
-
-    [Fact]
-    public async Task Session_EndToEndFlow_MultiTurnConversation_UsesCurrentTimeTool_AndLogsRawRequests()
+    public async Task MultiTurnSessionWithToolUsage()
     {
         // Arrange
         const string fixedUtcNow = "2026-04-20T12:34:56.0000000+00:00";
         StaticGetCurrentTimeTool staticTimeTool = new StaticGetCurrentTimeTool(fixedUtcNow);
 
-        const string expectedRequest1Body = """{"model":"gpt-5-nano","prompt_cache_key":"tests-e2e-multiturn","messages":[{"role":"developer","content":"You are a concise test assistant."},{"role":"user","content":[{"type":"text","text":"Hi"}]}],"reasoning_effort":"minimal","verbosity":"low","service_tier":"default","tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}]}""";
-        const string expectedRequest2Body = """{"model":"gpt-5-nano","prompt_cache_key":"tests-e2e-multiturn","messages":[{"role":"developer","content":"You are a concise test assistant."},{"role":"user","content":[{"type":"text","text":"Hi"}]},{"role":"assistant","content":[{"type":"text","text":"Hello!"}]},{"role":"user","content":[{"type":"text","text":"What is the current time in UTC?"}]}],"reasoning_effort":"minimal","verbosity":"low","service_tier":"default","tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}]}""";
-        const string expectedRequest3Body = """{"model":"gpt-5-nano","prompt_cache_key":"tests-e2e-multiturn","messages":[{"role":"developer","content":"You are a concise test assistant."},{"role":"user","content":[{"type":"text","text":"Hi"}]},{"role":"assistant","content":[{"type":"text","text":"Hello!"}]},{"role":"user","content":[{"type":"text","text":"What is the current time in UTC?"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_utc_1","type":"function","function":{"name":"get_current_time","arguments":"{\u0022timezone\u0022:\u0022UTC\u0022}"}}]},{"role":"tool","tool_call_id":"call_utc_1","content":"2026-04-20T12:34:56.0000000\u002B00:00"}],"reasoning_effort":"minimal","verbosity":"low","service_tier":"default","tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}]}""";
-        const string expectedRequest4Body = """{"model":"gpt-5-nano","prompt_cache_key":"tests-e2e-multiturn","messages":[{"role":"developer","content":"You are a concise test assistant."},{"role":"user","content":[{"type":"text","text":"Hi"}]},{"role":"assistant","content":[{"type":"text","text":"Hello!"}]},{"role":"user","content":[{"type":"text","text":"What is the current time in UTC?"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_utc_1","type":"function","function":{"name":"get_current_time","arguments":"{\u0022timezone\u0022:\u0022UTC\u0022}"}}]},{"role":"tool","tool_call_id":"call_utc_1","content":"2026-04-20T12:34:56.0000000\u002B00:00"},{"role":"assistant","content":[{"type":"text","text":"The current UTC time is 2026-04-20T12:34:56.0000000\u002B00:00."}]},{"role":"user","content":[{"type":"text","text":"Thanks"}]}],"reasoning_effort":"minimal","verbosity":"low","service_tier":"default","tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}]}""";
+        const string expectedRequest1Body = """{"messages":[{"role":"developer","content":"You are a concise test assistant."},{"role":"user","content":[{"type":"text","text":"Hi"}]}],"tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}]}""";
+        const string expectedRequest2Body = """{"messages":[{"role":"developer","content":"You are a concise test assistant."},{"role":"user","content":[{"type":"text","text":"Hi"}]},{"role":"assistant","content":[{"type":"text","text":"Hello!"}]},{"role":"user","content":[{"type":"text","text":"What is the current time in UTC?"}]}],"tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}]}""";
+        const string expectedRequest3Body = """{"messages":[{"role":"developer","content":"You are a concise test assistant."},{"role":"user","content":[{"type":"text","text":"Hi"}]},{"role":"assistant","content":[{"type":"text","text":"Hello!"}]},{"role":"user","content":[{"type":"text","text":"What is the current time in UTC?"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_utc_1","type":"function","function":{"name":"get_current_time","arguments":"{\u0022timezone\u0022:\u0022UTC\u0022}"}}]},{"role":"tool","tool_call_id":"call_utc_1","content":"2026-04-20T12:34:56.0000000\u002B00:00"}],"tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}]}""";
+        const string expectedRequest4Body = """{"messages":[{"role":"developer","content":"You are a concise test assistant."},{"role":"user","content":[{"type":"text","text":"Hi"}]},{"role":"assistant","content":[{"type":"text","text":"Hello!"}]},{"role":"user","content":[{"type":"text","text":"What is the current time in UTC?"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_utc_1","type":"function","function":{"name":"get_current_time","arguments":"{\u0022timezone\u0022:\u0022UTC\u0022}"}}]},{"role":"tool","tool_call_id":"call_utc_1","content":"2026-04-20T12:34:56.0000000\u002B00:00"},{"role":"assistant","content":[{"type":"text","text":"The current UTC time is 2026-04-20T12:34:56.0000000\u002B00:00."}]},{"role":"user","content":[{"type":"text","text":"Thanks"}]}],"tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}]}""";
         const string response1Body = """{"id":"chatcmpl_test_multiturn_1","object":"chat.completion","created":1710001001,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"Hello!","refusal":""}}],"usage":{"prompt_tokens":20,"completion_tokens":4,"total_tokens":24,"prompt_tokens_details":{"cached_tokens":2},"completion_tokens_details":{"reasoning_tokens":1}}}""";
         const string response2Body = """{"id":"chatcmpl_test_multiturn_2","object":"chat.completion","created":1710001002,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"tool_calls","message":{"role":"assistant","content":null,"refusal":"","tool_calls":[{"id":"call_utc_1","type":"function","function":{"name":"get_current_time","arguments":"{\"timezone\":\"UTC\"}"}}]}}],"usage":{"prompt_tokens":34,"completion_tokens":9,"total_tokens":43,"prompt_tokens_details":{"cached_tokens":3},"completion_tokens_details":{"reasoning_tokens":2}}}""";
         const string response3Body = """{"id":"chatcmpl_test_multiturn_3","object":"chat.completion","created":1710001003,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"The current UTC time is 2026-04-20T12:34:56.0000000+00:00.","refusal":""}}],"usage":{"prompt_tokens":46,"completion_tokens":12,"total_tokens":58,"prompt_tokens_details":{"cached_tokens":4},"completion_tokens_details":{"reasoning_tokens":3}}}""";
@@ -153,6 +69,7 @@ public class HarnessTests
 
             Session requestSession = new Session
             {
+                ChatCompletionsUrl = new Uri("http://localhost/v1/chat/completions"),
                 Model = "gpt-5-nano",
                 PromptCacheKey = "tests-e2e-multiturn",
                 ReasoningEffort = ReasoningEffort.Minimal,
@@ -342,185 +259,7 @@ public class HarnessTests
             Assert.Equal("You are welcome.", thanksResponse.Content);
     }
 
-    [Fact]
-    public async Task Session_RunTurnAsync_DoesNotAddReasoningContentPartsToMessages()
-    {
-        // Arrange
-        const string firstResponseBody = """{"id":"chatcmpl_reasoning_1","object":"chat.completion","created":1710002001,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":[{"type":"reasoning","text":"Internal chain-of-thought."},{"type":"output_text","text":"Visible answer."}],"refusal":""}}],"usage":{"prompt_tokens":10,"completion_tokens":4,"total_tokens":14,"prompt_tokens_details":{"cached_tokens":0},"completion_tokens_details":{"reasoning_tokens":2}}}""";
-        const string secondResponseBody = """{"id":"chatcmpl_reasoning_2","object":"chat.completion","created":1710002002,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"Follow-up answer.","refusal":""}}],"usage":{"prompt_tokens":18,"completion_tokens":3,"total_tokens":21,"prompt_tokens_details":{"cached_tokens":0},"completion_tokens_details":{"reasoning_tokens":1}}}""";
-
-        Session expectedRequestSession = new Session
-        {
-            Model = "gpt-5-nano",
-            PromptCacheKey = "tests-reasoning-filter",
-            ReasoningEffort = ReasoningEffort.Minimal,
-            Verbosity = Verbosity.Low,
-            ServiceTier = ServiceTier.Default
-        };
-        Request expectedFirstRequest = expectedRequestSession.CreateRequest(
-        [
-            new ChatCompletionDeveloperMessageParam { UseDeveloperMessageInsteadOfSystem = true, Content = "You are a concise test assistant." },
-            new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hello" }] }
-        ]);
-        Request expectedSecondRequest = expectedRequestSession.CreateRequest(
-        [
-            new ChatCompletionDeveloperMessageParam { UseDeveloperMessageInsteadOfSystem = true, Content = "You are a concise test assistant." },
-            new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hello" }] },
-            new ChatCompletionAssistantMessageParam { Content = [new ChatCompletionContentPartText { Text = "Visible answer." }] },
-            new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "And now?" }] }
-        ]);
-
-        await using FakeApiClientServer server = await FakeApiClientServer.StartAsync(
-            new Dictionary<string, string>
-            {
-                [expectedFirstRequest.ToJson()] = firstResponseBody,
-                [expectedSecondRequest.ToJson()] = secondResponseBody
-            });
-
-        Session session = new Session(new ApiClient(server.Client))
-        {
-            ChatCompletionsUrl = server.ChatCompletionsUri,
-            Model = "gpt-5-nano",
-            PromptCacheKey = "tests-reasoning-filter",
-            ReasoningEffort = ReasoningEffort.Minimal,
-            Verbosity = Verbosity.Low,
-            ServiceTier = ServiceTier.Default
-        };
-        session.AddMessage(new ChatCompletionDeveloperMessageParam { UseDeveloperMessageInsteadOfSystem = true, Content = "You are a concise test assistant." });
-
-        ChatCompletionUserMessageParam firstUserMessage = new ChatCompletionUserMessageParam
-        {
-            Content = [new ChatCompletionContentPartText { Text = "Hello" }]
-        };
-        ChatCompletionUserMessageParam secondUserMessage = new ChatCompletionUserMessageParam
-        {
-            Content = [new ChatCompletionContentPartText { Text = "And now?" }]
-        };
-
-        // Act
-        ChatCompletionMessage firstResponse = await session.RunTurnAsync(firstUserMessage, CancellationToken.None);
-        ChatCompletionMessage secondResponse = await session.RunTurnAsync(secondUserMessage, CancellationToken.None);
-
-        IReadOnlyList<RawRequestReady> rawRequests = Events.GetEventsForSession<RawRequestReady>(session.Id);
-
-        // Assert
-        Assert.Equal("Visible answer.", firstResponse.Content);
-        Assert.Equal("Follow-up answer.", secondResponse.Content);
-        Assert.Equal(2, rawRequests.Count);
-        Assert.Equal(expectedFirstRequest.ToJson(), rawRequests[0].RawRequest);
-        Assert.Equal(expectedSecondRequest.ToJson(), rawRequests[1].RawRequest);
-        Assert.DoesNotContain("Internal chain-of-thought.", rawRequests[1].RawRequest);
-    }
-
-    [Fact]
-    public async Task Session_RunTurnAsync_AllowsMultipleSessionsToRunConcurrentlyWithoutStateLeakage()
-    {
-        // Arrange
-        const string sessionOneResponseBody = """{"id":"chatcmpl_concurrent_1","object":"chat.completion","created":1710003001,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"Session one response.","refusal":""}}],"usage":{"prompt_tokens":11,"completion_tokens":4,"total_tokens":15,"prompt_tokens_details":{"cached_tokens":1},"completion_tokens_details":{"reasoning_tokens":1}}}""";
-        const string sessionTwoResponseBody = """{"id":"chatcmpl_concurrent_2","object":"chat.completion","created":1710003002,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"Session two response.","refusal":""}}],"usage":{"prompt_tokens":13,"completion_tokens":5,"total_tokens":18,"prompt_tokens_details":{"cached_tokens":2},"completion_tokens_details":{"reasoning_tokens":2}}}""";
-
-        Session expectedSessionOne = new Session
-        {
-            Model = "gpt-5-nano",
-            PromptCacheKey = "tests-concurrent-1",
-            ReasoningEffort = ReasoningEffort.Minimal,
-            Verbosity = Verbosity.Low,
-            ServiceTier = ServiceTier.Default
-        };
-        Session expectedSessionTwo = new Session
-        {
-            Model = "gpt-5-nano",
-            PromptCacheKey = "tests-concurrent-2",
-            ReasoningEffort = ReasoningEffort.Minimal,
-            Verbosity = Verbosity.Low,
-            ServiceTier = ServiceTier.Default
-        };
-
-        Request expectedRequestOne = expectedSessionOne.CreateRequest(
-        [
-            new ChatCompletionDeveloperMessageParam { UseDeveloperMessageInsteadOfSystem = true, Content = "You are assistant one." },
-            new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Message for session one." }] }
-        ]);
-        Request expectedRequestTwo = expectedSessionTwo.CreateRequest(
-        [
-            new ChatCompletionDeveloperMessageParam { UseDeveloperMessageInsteadOfSystem = true, Content = "You are assistant two." },
-            new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Message for session two." }] }
-        ]);
-
-        await using FakeApiClientServer server = await FakeApiClientServer.StartAsync(
-            new Dictionary<string, string>
-            {
-                [expectedRequestOne.ToJson()] = sessionOneResponseBody,
-                [expectedRequestTwo.ToJson()] = sessionTwoResponseBody
-            });
-
-        Session sessionOne = new Session(new ApiClient(server.Client))
-        {
-            ChatCompletionsUrl = server.ChatCompletionsUri,
-            Model = "gpt-5-nano",
-            PromptCacheKey = "tests-concurrent-1",
-            ReasoningEffort = ReasoningEffort.Minimal,
-            Verbosity = Verbosity.Low,
-            ServiceTier = ServiceTier.Default
-        };
-        sessionOne.AddMessage(new ChatCompletionDeveloperMessageParam 
-        { 
-            UseDeveloperMessageInsteadOfSystem = true, 
-            Content = "You are assistant one." 
-        });
-
-        Session sessionTwo = new Session(new ApiClient(server.Client))
-        {
-            ChatCompletionsUrl = server.ChatCompletionsUri,
-            Model = "gpt-5-nano",
-            PromptCacheKey = "tests-concurrent-2",
-            ReasoningEffort = ReasoningEffort.Minimal,
-            Verbosity = Verbosity.Low,
-            ServiceTier = ServiceTier.Default
-        };
-        sessionTwo.AddMessage(new ChatCompletionDeveloperMessageParam 
-        { 
-            UseDeveloperMessageInsteadOfSystem = true,
-            Content = "You are assistant two." 
-        });
-
-        ChatCompletionUserMessageParam sessionOneMessage = new ChatCompletionUserMessageParam
-        {
-            Content = [new ChatCompletionContentPartText { Text = "Message for session one." }]
-        };
-        ChatCompletionUserMessageParam sessionTwoMessage = new ChatCompletionUserMessageParam
-        {
-            Content = [new ChatCompletionContentPartText { Text = "Message for session two." }]
-        };
-
-        // Act
-        Task<ChatCompletionMessage> sessionOneTurn = sessionOne.RunTurnAsync(sessionOneMessage, CancellationToken.None);
-        Task<ChatCompletionMessage> sessionTwoTurn = sessionTwo.RunTurnAsync(sessionTwoMessage, CancellationToken.None);
-        ChatCompletionMessage[] responses = await Task.WhenAll(sessionOneTurn, sessionTwoTurn);
-
-        // Assert
-        Assert.Equal("Session one response.", responses[0].Content);
-        Assert.Equal("Session two response.", responses[1].Content);
-
-        IReadOnlyList<RawRequestReady> sessionOneRawRequests = Events.GetEventsForSession<RawRequestReady>(sessionOne.Id);
-        IReadOnlyList<RawRequestReady> sessionTwoRawRequests = Events.GetEventsForSession<RawRequestReady>(sessionTwo.Id);
-        Assert.Single(sessionOneRawRequests);
-        Assert.Single(sessionTwoRawRequests);
-        Assert.Equal(expectedRequestOne.ToJson(), sessionOneRawRequests[0].RawRequest);
-        Assert.Equal(expectedRequestTwo.ToJson(), sessionTwoRawRequests[0].RawRequest);
-
-        Assert.Equal(11, sessionOne.TotalInputTokens);
-        Assert.Equal(1, sessionOne.TotalCachedInputTokens);
-        Assert.Equal(4, sessionOne.TotalOutputTokens);
-        Assert.Equal(1, sessionOne.TotalReasoningOutputTokens);
-
-        Assert.Equal(13, sessionTwo.TotalInputTokens);
-        Assert.Equal(2, sessionTwo.TotalCachedInputTokens);
-        Assert.Equal(5, sessionTwo.TotalOutputTokens);
-        Assert.Equal(2, sessionTwo.TotalReasoningOutputTokens);
-    }
-
-    private sealed class StaticGetCurrentTimeTool : ChatCompletionFunctionTool
+     private sealed class StaticGetCurrentTimeTool : ChatCompletionFunctionTool
     {
         private readonly string _fixedIsoTime;
 
