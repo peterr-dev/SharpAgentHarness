@@ -99,7 +99,7 @@ app.MapPost("/api/sessions/{sessionId}/messages", async (Guid sessionId, SendMes
         ArgumentException.ThrowIfNullOrEmpty(body.message, nameof(body.message));
 
         Session session = Sessions.GetSession(sessionId);
-        int maxIterations = body.maxIterations ?? 5;
+        int maxIterations = body.maxIterations;
         if (maxIterations <= 0)
             throw new ArgumentOutOfRangeException(nameof(body.maxIterations), "MaxIterations must be greater than zero.");
 
@@ -270,7 +270,7 @@ record CreateSessionRequest(string instructions, string chatCompletionsUrl);
 
 record SendMessageRequest(
     string message,
-    int? maxIterations,
+    int maxIterations,
     string? toolkit,
     double? temperature,
     string? model,

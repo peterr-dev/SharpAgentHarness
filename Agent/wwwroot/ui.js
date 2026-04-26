@@ -22,7 +22,7 @@ const requestDefinitions = {
       { key: 'model', label: 'Model', type: 'text', placeholder: 'gpt-5-nano', defaultValue: 'gpt-5-nano' },
       { key: 'temperature', label: 'Temperature', type: 'text', placeholder: '0.2' },
       { key: 'maxIterations', label: 'Max Iterations', type: 'text', placeholder: '5', defaultValue: '5' },
-      { key: 'toolkit', label: 'Toolkit', type: 'text', placeholder: 'Default', defaultValue: 'Default' },
+      { key: 'toolkit', label: 'Toolkit', type: 'text', placeholder: 'Example', defaultValue: 'Example' },
       { key: 'promptCacheKey', label: 'Prompt Cache Key', type: 'text', placeholder: 'SharpAgentHarness', defaultValue: 'SharpAgentHarness' },
       {
         key: 'serviceTier',
