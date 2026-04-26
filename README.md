@@ -100,27 +100,19 @@ Example response:
 
 #### `POST /api/sessions`
 
-Creates a new session. The request body is optional; omitted fields fall back to these defaults:
+Creates a new session.
 
-* `model`: `gpt-5-nano`
-* `instructions`: `You are a helpful assistant.`
-* `promptCacheKey`: `SharpAgentHarness`
-* `tier`: `Auto`
-* `reasoning`: `Low`
-* `verbosity`: `Low`
-* `toolkit`: `Default`
+Request body:
+
+- `instructions` - developer instructions for the session.
+- `chatCompletionsUrl` - URL for a Chat Completions-compatible endpoint for this session.
 
 Example request body:
 
 ```json
 {
-  "model": "gpt-5-nano",
   "instructions": "You are a helpful assistant.",
-  "promptCacheKey": "SharpAgentHarness",
-  "tier": "Auto",
-  "reasoning": "Minimal",
-  "verbosity": "Low",
-  "toolkit": "Default"
+  "chatCompletionsUrl": "https://api.openai.com/v1/chat/completions"
 }
 ```
 
@@ -129,13 +121,8 @@ Example response body:
 ```json
 {
   "id": "8c6d4e4f-3f64-4dbe-a474-f0df2a87c1d2",
-  "model": "gpt-5-nano",
-  "tier": "Auto",
-  "promptCacheKey": "SharpAgentHarness",
-  "reasoning": "Low",
-  "verbosity": "Low",
+  "chatCompletionsUrl": "https://api.openai.com/v1/chat/completions",
   "instructions": "You are a helpful assistant.",
-  "toolkitName": "Default",
   "usageTotals": {
     "inputTokens": 0,
     "cachedInputTokens": 0,
@@ -144,8 +131,6 @@ Example response body:
   }
 }
 ```
-
-If the requested toolkit does not exist, the API returns `400 Bad Request`.
 
 #### `GET /api/sessions/{sessionId}`
 
@@ -157,17 +142,102 @@ If the session doesn't exist, the API returns `404 Not Found`.
 
 Returns a list of events currently held in memory for the given session ID.
 
+Current event types include:
+
+- `TurnStarted`
+- `RequestReady`
+- `RawRequestReady`
+- `ResponseReceived`
+- `RawResponseReceived`
+- `TurnCompleted`
+
+Example response body:
+
+```json
+[
+  {
+    "type": "TurnStarted",
+    "sessionId": "8c6d4e4f-3f64-4dbe-a474-f0df2a87c1d2"
+  },
+  {
+    "type": "RequestReady",
+    "sessionId": "8c6d4e4f-3f64-4dbe-a474-f0df2a87c1d2",
+    "details": {
+      "request": {
+        "messages": [
+          {
+            "role": "developer",
+            "content": "You are a helpful assistant."
+          },
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "Hello!"
+              }
+            ]
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "get_current_time",
+              "description": "Get the current time in ISO 8601 format for a specified timezone.",
+              "strict": true,
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "timezone": {
+                    "type": "string",
+                    "description": "The IANA timezone identifier (e.g., 'America/New_York'). If not provided, defaults to UTC."
+                  }
+                },
+                "required": ["timezone"],
+                "additionalProperties": false
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+]
+```
+
+`RequestReady` includes the structured request model that will be sent to the chat completions API. `RawRequestReady` and `RawResponseReceived` expose the raw JSON payloads.
+
 If the session doesn't exist, the API returns `404 Not Found`.
 
 #### `POST /api/sessions/{sessionId}/messages`
 
 Sends a user message to an existing session.
 
+Request body:
+
+- `message` - required user message text.
+- `maxIterations` - optional maximum number of request-response/tool-call loops for the turn. Defaults to `5`.
+- `toolkit` - optional toolkit name for this turn. Defaults to `Default`.
+- `temperature` - optional temperature passed through to the chat completions request.
+- `model` - optional model name passed through to the chat completions request.
+- `promptCacheKey` - optional prompt cache key passed through to the chat completions request.
+- `reasoningEffort` - optional reasoning setting. Allowed values: `None`, `Minimal`, `Low`, `Medium`, `High`, `XHigh`.
+- `verbosity` - optional verbosity setting. Allowed values: `Low`, `Medium`, `High`.
+- `serviceTier` - optional service tier. Allowed values: `Auto`, `Default`, `Flex`, `Scale`, `Priority`.
+
+The harness creates a `Default` toolkit at startup and registers the example `get_current_time` function tool into it.
+
 Example request body:
 
 ```json
 {
-  "message": "What time is it?"
+  "message": "What time is it in UTC?",
+  "toolkit": "Default",
+  "maxIterations": 5,
+  "reasoningEffort": "Minimal",
+  "verbosity": "Low",
+  "serviceTier": "Auto"
 }
 ```
 
@@ -179,7 +249,7 @@ Example response body:
 }
 ```
 
-If the session doesn't exist, the API returns `404 Not Found`.
+If the session or requested toolkit doesn't exist, the API returns `404 Not Found`.
 
 ## Current Limitations
 
@@ -188,7 +258,7 @@ This project is intentionally narrow in scope:
 - No safety protections, or concurrency support, have been implemented.
 - Sessions and events are stored in memory only.
 - Only a (non-streaming) subset of the Chat Completions API is supported.
-- Tool selection happens on session creation, rather than dynamically per turn.
+- Toolkits are registered in code; there is no API for listing or managing them.
 - Tests are minimal and focused on core aspects of harness behaviour.
 - The `Agent` project also hosts the Web UI.
 
