@@ -1,7 +1,4 @@
-﻿using Core;
-using System.Text.Json;
-using System.Text.Json.Nodes;
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Nodes;
 
 namespace Core.ChatCompletions
 {
@@ -31,70 +28,48 @@ namespace Core.ChatCompletions
         Priority
     }
 
-    public sealed class Request
+    public class Request
     {
-        private readonly bool _includeOpenAiHostedParameters;
+        public List<ChatCompletionMessageParam> Messages { get; set; } = new();
 
-        public string Model { get; }
+        public List<ChatCompletionTool> Tools { get; set; } = new();
 
-        public List<ChatCompletionMessageParam> Messages { get; } = new();
+        public double? Temperature { get; set; }
 
-        public ReasoningEffort ReasoningEffort { get; }
+        public string? Model { get; set; }
 
-        public Verbosity Verbosity { get; }
+        public ReasoningEffort? ReasoningEffort { get; set; }
 
-        public ServiceTier ServiceTier { get; }
+        public Verbosity? Verbosity { get; set; }
 
-        public double? Temperature { get; }
+        public ServiceTier? ServiceTier { get; set; }
 
-        public int? MaxCompletionTokens { get; }
-
-        public List<ChatCompletionTool> Tools { get; }
-
-        public string PromptCacheKey { get; }
-
-        internal Request(Session session)
-        {
-            if (session is null) throw new ArgumentNullException(nameof(session));
-
-            Model = session.Model;
-            _includeOpenAiHostedParameters = session.ChatCompletionsUrl.ToString() == ApiClient.OpenAIChatCompletionsUrl;
-            PromptCacheKey = session.PromptCacheKey;
-            ReasoningEffort = session.ReasoningEffort;
-            Verbosity = session.Verbosity;
-            ServiceTier = session.ServiceTier;
-            Temperature = session.Temperature;
-            MaxCompletionTokens = session.MaxCompletionTokens;
-            Tools = session.Toolkit?.Tools.ToList() ?? new List<ChatCompletionTool>();
-        }
-
-        #region OpenAI Chat Completions JSON representation
+        public string? PromptCacheKey { get; set; }
 
         public string ToJson()
         {
-            if (Messages.Count == 0)
-                throw new InvalidOperationException("At least one message is required.");
-
-            JsonObject body = new JsonObject
+            JsonObject body = new JsonObject()
             {
-                ["messages"] = new JsonArray(Messages.ConvertAll(m => (JsonNode?)m.ToJson()).ToArray())
+                ["messages"] = new JsonArray(Messages.ConvertAll(m => (JsonNode?)m.ToJson()).ToArray()),
             };
 
-            // Omit OpenAI-hosted-only request fields.
-            if (_includeOpenAiHostedParameters)
-            {
+            if (Temperature != null)
+                body["temperature"] = Temperature;
+
+            if (!string.IsNullOrEmpty(Model))
                 body["model"] = Model;
+
+            if (!string.IsNullOrEmpty(PromptCacheKey))
                 body["prompt_cache_key"] = PromptCacheKey;
-                body["reasoning_effort"] = ReasoningEffort.ToString().ToLower();
-                body["verbosity"] = Verbosity.ToString().ToLower();
-                body["service_tier"] = ServiceTier.ToString().ToLower();
-            }
 
-            if (Temperature.HasValue)
-                body["temperature"] = Temperature.Value;
+            if (ReasoningEffort != null)
+                body["reasoning_effort"] = ReasoningEffort.Value.ToString().ToLower();
 
-            if (MaxCompletionTokens.HasValue)
-                body["max_completion_tokens"] = MaxCompletionTokens.Value;
+            if (Verbosity != null)
+                body["verbosity"] = Verbosity.Value.ToString().ToLower();   
+            
+            if (ServiceTier != null)
+                body["service_tier"] = ServiceTier.Value.ToString().ToLower();
 
             Tools.ForEach(tool =>
             {
@@ -150,17 +125,10 @@ namespace Core.ChatCompletions
 
             return body.ToJsonString();
         }
-
-        #endregion
     }
 
     #region Messages
 
-    [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
-    [JsonDerivedType(typeof(ChatCompletionDeveloperMessageParam), "developer")]
-    [JsonDerivedType(typeof(ChatCompletionUserMessageParam), "user")]
-    [JsonDerivedType(typeof(ChatCompletionAssistantMessageParam), "assistant")]
-    [JsonDerivedType(typeof(ChatCompletionToolMessageParam), "tool")]
     public abstract class ChatCompletionMessageParam
     {
         public abstract JsonObject ToJson();
@@ -170,13 +138,11 @@ namespace Core.ChatCompletions
     {
         public required string Content { get; init; }
 
-        public required bool UseDeveloperMessageInsteadOfSystem { get; init; }
-
         public override JsonObject ToJson()
         {
             return new JsonObject
             {
-                ["role"] = UseDeveloperMessageInsteadOfSystem ? "developer" : "system",
+                ["role"] = "developer",
                 ["content"] = Content
             };
         }
@@ -196,8 +162,6 @@ namespace Core.ChatCompletions
         }
     }
 
-    [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
-    [JsonDerivedType(typeof(ChatCompletionContentPartText), "text")]
     public abstract class ChatCompletionContentPart
     {
         public abstract JsonObject ToJson();

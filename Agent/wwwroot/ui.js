@@ -3,24 +3,36 @@ const requestDefinitions = {
     method: 'POST',
     path: '/sessions',
     fields: [
-      { key: 'model', label: 'Model', type: 'text', placeholder: 'gpt-5-nano', defaultValue: 'gpt-5-nano' },
       { key: 'instructions', label: 'Instructions', type: 'textarea', placeholder: 'You are a helpful assistant.', defaultValue: 'You are a helpful assistant.' },
       {
         key: 'chatCompletionsUrl',
         label: 'Chat Completions URL',
         type: 'text',
         placeholder: 'https://api.openai.com/v1/chat/completions',
-      },
+        defaultValue: 'https://api.openai.com/v1/chat/completions'
+      }
+    ]
+  },
+  'submit-message': {
+    method: 'POST',
+    path: '/sessions/{sessionId}/messages',
+    fields: [
+      { key: 'sessionId', label: 'Session ID', type: 'text', placeholder: 'GUID', required: true },
+      { key: 'message', label: 'Message', type: 'textarea', placeholder: 'Hello there', required: true },
+      { key: 'model', label: 'Model', type: 'text', placeholder: 'gpt-5-nano', defaultValue: 'gpt-5-nano' },
+      { key: 'temperature', label: 'Temperature', type: 'text', placeholder: '0.2' },
+      { key: 'maxIterations', label: 'Max Iterations', type: 'text', placeholder: '5', defaultValue: '5' },
+      { key: 'toolkit', label: 'Toolkit', type: 'text', placeholder: 'Default', defaultValue: 'Default' },
       { key: 'promptCacheKey', label: 'Prompt Cache Key', type: 'text', placeholder: 'SharpAgentHarness', defaultValue: 'SharpAgentHarness' },
       {
-        key: 'tier',
+        key: 'serviceTier',
         label: 'Service Tier',
         type: 'select',
-        options: ['Auto', 'Default', 'Flex', 'Priority'],
+        options: ['Auto', 'Default', 'Flex', 'Scale', 'Priority'],
         defaultValue: 'Auto'
       },
       {
-        key: 'reasoning',
+        key: 'reasoningEffort',
         label: 'Reasoning Effort',
         type: 'select',
         options: ['None', 'Minimal', 'Low', 'Medium', 'High', 'XHigh'],
@@ -33,14 +45,6 @@ const requestDefinitions = {
         options: ['Low', 'Medium', 'High'],
         defaultValue: 'Low'
       }
-    ]
-  },
-  'submit-message': {
-    method: 'POST',
-    path: '/sessions/{sessionId}/messages',
-    fields: [
-      { key: 'sessionId', label: 'Session ID', type: 'text', placeholder: 'GUID', required: true },
-      { key: 'message', label: 'Message', type: 'textarea', placeholder: 'Hello there', required: true }
     ]
   },
   'get-session': {
@@ -65,48 +69,71 @@ const cachePill = document.getElementById('cachePill');
 const responseBody = document.getElementById('responseBody');
 const copyBtn = document.getElementById('copyBtn');
 
-const openAiHostedOnlyFieldKeys = ['model', 'promptCacheKey', 'tier', 'reasoning', 'verbosity'];
+const openAiHostedOnlyFieldKeys = ['model', 'promptCacheKey', 'serviceTier', 'reasoningEffort', 'verbosity'];
 
 
 // Keep track of the most recently created session so follow-up calls are quicker to fill in.
-const LAST_SESSION_ID_STORAGE_KEY = 'sharpAgentHarnessLastSessionId';
-let lastCreatedSessionId = loadLastSessionId();
+const LAST_SESSION_STORAGE_KEY = 'sharpAgentHarnessLastSession';
+let lastCreatedSession = loadLastSession();
 
-function loadLastSessionId() {
+function loadLastSession() {
   try {
-    return localStorage.getItem(LAST_SESSION_ID_STORAGE_KEY) || '';
+    const storedValue = localStorage.getItem(LAST_SESSION_STORAGE_KEY);
+
+    if (!storedValue) {
+      return null;
+    }
+
+    const parsed = JSON.parse(storedValue);
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+
+    const sessionId = typeof parsed.id === 'string' ? parsed.id : '';
+    const chatCompletionsUrl = typeof parsed.chatCompletionsUrl === 'string' ? parsed.chatCompletionsUrl : '';
+
+    if (!sessionId) {
+      return null;
+    }
+
+    return {
+      id: sessionId,
+      chatCompletionsUrl
+    };
   } catch {
-    return '';
+    return null;
   }
 }
 
-function saveLastSessionId(sessionId) {
-  lastCreatedSessionId = sessionId;
+function saveLastSession(session) {
+  lastCreatedSession = session;
 
   try {
-    localStorage.setItem(LAST_SESSION_ID_STORAGE_KEY, sessionId);
+    localStorage.setItem(LAST_SESSION_STORAGE_KEY, JSON.stringify(session));
   } catch {
     // Ignore storage write errors, because session auto-fill is a convenience feature.
   }
 }
 
-function findSessionIdFromResponse(responseText) {
+function findSessionFromResponse(responseText) {
   try {
     const parsed = JSON.parse(responseText);
 
-    if (parsed && typeof parsed === 'object') {
-      if (typeof parsed.id === 'string') return parsed.id;
-      if (typeof parsed.sessionId === 'string') return parsed.sessionId;
+    if (parsed && typeof parsed === 'object' && typeof parsed.id === 'string') {
+      return {
+        id: parsed.id,
+        chatCompletionsUrl: typeof parsed.chatCompletionsUrl === 'string' ? parsed.chatCompletionsUrl : ''
+      };
     }
   } catch {
-    return '';
+    return null;
   }
 
-  return '';
+  return null;
 }
 
 function populateSessionIdFieldIfAvailable() {
-  if (!lastCreatedSessionId) {
+  if (!lastCreatedSession?.id) {
     return;
   }
 
@@ -116,7 +143,7 @@ function populateSessionIdFieldIfAvailable() {
   }
 
   if (!sessionIdField.value.trim()) {
-    sessionIdField.value = lastCreatedSessionId;
+    sessionIdField.value = lastCreatedSession.id;
   }
 }
 
@@ -187,15 +214,20 @@ function isLocalChatCompletionsUrl(urlValue) {
   }
 }
 
-function updateCreateSessionFieldVisibility() {
-  if (requestTypeSelect.value !== 'create-session') {
-    return;
-  }
+function updateRequestFieldVisibility() {
+  let usesLocalChatCompletionsUrl = false;
 
-  const chatCompletionsUrlField = dynamicFields.querySelector('[data-field="chatCompletionsUrl"]');
-  const usesLocalChatCompletionsUrl = chatCompletionsUrlField
-    ? isLocalChatCompletionsUrl(chatCompletionsUrlField.value.trim())
-    : false;
+  if (requestTypeSelect.value === 'submit-message') {
+    const sessionIdField = dynamicFields.querySelector('[data-field="sessionId"]');
+    const sessionId = sessionIdField?.value.trim() || '';
+
+    usesLocalChatCompletionsUrl = Boolean(
+      lastCreatedSession
+      && sessionId
+      && lastCreatedSession.id === sessionId
+      && isLocalChatCompletionsUrl(lastCreatedSession.chatCompletionsUrl)
+    );
+  }
 
   openAiHostedOnlyFieldKeys.forEach((fieldKey) => {
     const row = dynamicFields.querySelector(`[data-field-row="${fieldKey}"]`);
@@ -259,14 +291,20 @@ function renderDynamicFields() {
   });
 
   const chatCompletionsUrlField = dynamicFields.querySelector('[data-field="chatCompletionsUrl"]');
+  const sessionIdField = dynamicFields.querySelector('[data-field="sessionId"]');
+
   if (chatCompletionsUrlField) {
-    chatCompletionsUrlField.addEventListener('input', updateCreateSessionFieldVisibility);
-    chatCompletionsUrlField.addEventListener('change', updateCreateSessionFieldVisibility);
+    chatCompletionsUrlField.addEventListener('input', updateRequestFieldVisibility);
+    chatCompletionsUrlField.addEventListener('change', updateRequestFieldVisibility);
   }
 
-  updateCreateSessionFieldVisibility();
+  if (sessionIdField) {
+    sessionIdField.addEventListener('input', updateRequestFieldVisibility);
+    sessionIdField.addEventListener('change', updateRequestFieldVisibility);
+  }
 
   populateSessionIdFieldIfAvailable();
+  updateRequestFieldVisibility();
 }
 
 function readFormValues() {
@@ -275,6 +313,32 @@ function readFormValues() {
     values[fieldElement.dataset.field] = fieldElement.value.trim();
   });
   return values;
+}
+
+function parseOptionalNumber(value, fieldLabel) {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsedValue = Number(value);
+  if (!Number.isFinite(parsedValue)) {
+    throw new Error(`Field "${fieldLabel}" must be a valid number.`);
+  }
+
+  return parsedValue;
+}
+
+function parseOptionalInteger(value, fieldLabel) {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsedValue = Number(value);
+  if (!Number.isInteger(parsedValue)) {
+    throw new Error(`Field "${fieldLabel}" must be a whole number.`);
+  }
+
+  return parsedValue;
 }
 
 function formatIfJson(text) {
@@ -333,20 +397,29 @@ function buildRequest() {
 
   let payload;
   if (requestTypeSelect.value === 'create-session') {
-    const usesLocalChatCompletionsUrl = isLocalChatCompletionsUrl(values.chatCompletionsUrl);
-
     payload = {};
-    if (!usesLocalChatCompletionsUrl && values.model) payload.model = values.model;
     if (values.instructions) payload.instructions = values.instructions;
     if (values.chatCompletionsUrl) payload.chatCompletionsUrl = values.chatCompletionsUrl;
-    if (!usesLocalChatCompletionsUrl && values.promptCacheKey) payload.promptCacheKey = values.promptCacheKey;
-    if (!usesLocalChatCompletionsUrl && values.tier) payload.tier = values.tier;
-    if (!usesLocalChatCompletionsUrl && values.reasoning) payload.reasoning = values.reasoning;
-    if (!usesLocalChatCompletionsUrl && values.verbosity) payload.verbosity = values.verbosity;
   }
 
   if (requestTypeSelect.value === 'submit-message') {
+    const usesLocalChatCompletionsUrl = Boolean(
+      lastCreatedSession
+      && lastCreatedSession.id === values.sessionId
+      && isLocalChatCompletionsUrl(lastCreatedSession.chatCompletionsUrl)
+    );
+    const maxIterations = parseOptionalInteger(values.maxIterations, 'Max Iterations');
+    const temperature = parseOptionalNumber(values.temperature, 'Temperature');
+
     payload = { message: values.message };
+    if (maxIterations !== undefined) payload.maxIterations = maxIterations;
+    if (values.toolkit) payload.toolkit = values.toolkit;
+    if (temperature !== undefined) payload.temperature = temperature;
+    if (values.model && !usesLocalChatCompletionsUrl) payload.model = values.model;
+    if (values.promptCacheKey && !usesLocalChatCompletionsUrl) payload.promptCacheKey = values.promptCacheKey;
+    if (values.reasoningEffort && !usesLocalChatCompletionsUrl) payload.reasoningEffort = values.reasoningEffort;
+    if (values.verbosity && !usesLocalChatCompletionsUrl) payload.verbosity = values.verbosity;
+    if (values.serviceTier && !usesLocalChatCompletionsUrl) payload.serviceTier = values.serviceTier;
   }
 
   const hasBody = definition.method !== 'GET';
@@ -403,9 +476,9 @@ async function sendRequest() {
     }
 
     if (requestTypeSelect.value === 'create-session' && result.ok) {
-      const createdSessionId = findSessionIdFromResponse(result.text);
-      if (createdSessionId) {
-        saveLastSessionId(createdSessionId);
+      const createdSession = findSessionFromResponse(result.text);
+      if (createdSession) {
+        saveLastSession(createdSession);
       }
     }
   } catch (error) {

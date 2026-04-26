@@ -4,32 +4,24 @@ namespace Core.ChatCompletions
 {
     public class ApiClient
     {
-        public const string OpenAIChatCompletionsUrl = "https://api.openai.com/v1/chat/completions";
-        
-        private static readonly HttpClient defaultHttpClient = new HttpClient();
-
         private readonly HttpClient _httpClient;
-
-        public ApiClient() : this(defaultHttpClient)
-        {
-        }
 
         public ApiClient(HttpClient httpClient)
         {
             _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         }
 
-        public async Task<Response> SendMessageAsync(Session session, Request req, CancellationToken cancellationToken)
+        public async Task<Response> SendMessageAsync(Session session, Request request, Uri chatCompletionsUri, CancellationToken cancellationToken)
         {
-            if (req is null) throw new ArgumentNullException(nameof(req));
+            if (request is null) throw new ArgumentNullException(nameof(request));
 
-            using HttpRequestMessage httpReq = new HttpRequestMessage(HttpMethod.Post, session.ChatCompletionsUrl);
+            using HttpRequestMessage httpReq = new HttpRequestMessage(HttpMethod.Post, chatCompletionsUri);
 
-            // Assume unit testing if there is no API key in the environment
-            string apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "test-api-key";
+            string? apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+            if (!string.IsNullOrEmpty(apiKey))
+                httpReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
 
-            httpReq.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
-            string reqBody = req.ToJson();
+            string reqBody = request.ToJson();
             httpReq.Content = new StringContent(reqBody, Encoding.UTF8, "application/json");
             HookRegistry.RunRawRequestReadyHooks(session, reqBody);
 
@@ -43,7 +35,7 @@ namespace Core.ChatCompletions
             }
             else
             {
-                throw new InvalidOperationException($"Chat Completions API returned error: {response.StatusCode}, body: {responseBody}");
+                throw new InvalidOperationException($"Chat Completions API returned an error: {response.StatusCode}, body: {responseBody}");
             }
         }
     }

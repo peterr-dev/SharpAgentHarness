@@ -1,49 +1,85 @@
 using Core.ChatCompletions;
+using System.Threading;
 
 namespace Core
 {
     public class Turn
     {
-        private readonly ApiClient _chatCompletionsClient;
+        public required Session Session { get; init; }
 
-        private readonly int _maxIterations;
+        public required ApiClient ApiClient { get; init; }
 
-        public Turn(ApiClient chatCompletionsClient, int maxIterations)
+        public required Uri ChatCompletionsUri { get; init; }
+
+        public required CancellationToken CancellationToken { get; init; }
+
+        public required int MaxIterations { get; init; }
+
+        public Toolkit? Toolkit { get; init; }
+
+        public double? Temperature { get; init; }
+
+        public string? Model { get; init; }
+
+        public ReasoningEffort? ReasoningEffort { get; init; }
+
+        public Verbosity? Verbosity { get; init; }
+
+        public ServiceTier? ServiceTier { get; init; }
+
+        public string? PromptCacheKey { get; init; }
+
+        public async Task<ChatCompletionMessage> RunTurnAsync(ChatCompletionMessageParam message)
         {
-            _chatCompletionsClient = chatCompletionsClient ?? throw new ArgumentNullException(nameof(chatCompletionsClient));
-            _maxIterations = maxIterations;
-        }
-
-        public async Task<ChatCompletionMessage> RunTurnAsync(Session session, ChatCompletionMessageParam message, CancellationToken cancellationToken)
-        {
-            if (session is null) throw new ArgumentNullException(nameof(session));
-            if (message is null) throw new ArgumentNullException(nameof(message));
-
-            await session.WaitForTurnAsync(cancellationToken);
-            HookRegistry.RunTurnStartedHooks(session);
+            HookRegistry.RunTurnStartedHooks(Session);
 
             try
             {
-                for (var iteration = 0; iteration < _maxIterations; iteration++)
+                for (var iteration = 0; iteration < MaxIterations; iteration++)
                 {
-                    session.AddMessage(message);
- 
-                    Request req = session.CreateRequest(session.Messages);
-                    HookRegistry.RunRequestReadyHooks(session, req);
-                    
-                    Response response = await _chatCompletionsClient.SendMessageAsync(session, req, cancellationToken);
-                    HookRegistry.RunResponseReceivedHooks(session, response);
+                    Session.Messages.Add(message);
+
+                    Request request = new Request
+                    {
+                        Messages = Session.Messages.ToList()
+                    };
+
+                    if (Toolkit != null)
+                        request.Tools = Toolkit.Tools;
+
+                    if (Temperature != null)
+                        request.Temperature = Temperature;
+
+                    if (Model != null)
+                        request.Model = Model;
+
+                    if (PromptCacheKey != null)
+                        request.PromptCacheKey = PromptCacheKey;
+
+                    if (ReasoningEffort != null)
+                        request.ReasoningEffort = ReasoningEffort;
+
+                    if (Verbosity != null)
+                        request.Verbosity = Verbosity;
+
+                    if (ServiceTier != null)
+                        request.ServiceTier = ServiceTier;
+
+                    HookRegistry.RunRequestReadyHooks(Session, request);
+
+                    Response response = await ApiClient.SendMessageAsync(Session, request, ChatCompletionsUri, CancellationToken);
+                    HookRegistry.RunResponseReceivedHooks(Session, response);
 
                     if (response is SuccessResponse success)
                     {
-                        session.AddUsage(success.Usage);
+                        Session.AddUsage(success.Usage);
                         ChatCompletionChoice choice = success.Choices.FirstOrDefault() ?? throw new InvalidOperationException("LLM response does not contain any choices.");
-                        
+
                         if (choice.FinishReason == FinishReason.Stop)
                         {
                             if (string.IsNullOrEmpty(choice.Message.Content)) throw new InvalidOperationException("LLM response does not contain content.");
 
-                            session.AddMessage(new ChatCompletionAssistantMessageParam
+                            Session.Messages.Add(new ChatCompletionAssistantMessageParam
                             {
                                 Content = new List<ChatCompletionContentPart>
                                 {
@@ -62,10 +98,10 @@ namespace Core
                             {
                                 if (toolCall is ChatCompletionMessageFunctionCall functionCall)
                                 {
-                                    ChatCompletionFunctionTool? functionTool = session.Toolkit?.Tools.OfType<ChatCompletionFunctionTool>().FirstOrDefault(t => t.Name.Equals(functionCall.FunctionName, StringComparison.OrdinalIgnoreCase));
+                                    ChatCompletionFunctionTool? functionTool = Toolkit?.Tools.OfType<ChatCompletionFunctionTool>().FirstOrDefault(t => t.Name.Equals(functionCall.FunctionName, StringComparison.OrdinalIgnoreCase));
                                     if (functionTool is not null)
                                     {
-                                        session.AddMessage(new ChatCompletionAssistantMessageParam
+                                        Session.Messages.Add(new ChatCompletionAssistantMessageParam
                                         {
                                             Content = null,
                                             ToolCalls = new List<ChatCompletionMessageToolCall> { functionCall }
@@ -78,6 +114,7 @@ namespace Core
                                             ToolCallId = functionCall.Id,
                                             Content = toolResponse
                                         };
+
                                         message = toolCallResultsMessage;
                                     }
                                     else
@@ -95,21 +132,19 @@ namespace Core
                         {
                             throw new InvalidOperationException($"LLM response returned with unsupported finish reason: {choice.FinishReason}");
                         }
-
                     }
-                    else 
+                    else
                     if (response is ErrorResponse error)
                     {
                         throw new InvalidOperationException($"The LLM returned an error response. Message: {error.Message}; Type: {error.Type}; Param: {error.Param}; Code: {error.Code}");
                     }
                 }
 
-                throw new InvalidOperationException($"Maximum of {_maxIterations} iterations reached without a 'stop' finish reason from the LLM.");
+                throw new InvalidOperationException($"Maximum of {MaxIterations} iterations reached without a 'stop' finish reason from the LLM.");
             }
             finally
             {
-                HookRegistry.RunTurnCompletedHooks(session);
-                session.ReleaseTurn();
+                HookRegistry.RunTurnCompletedHooks(Session);
             }
         }
     }

@@ -23,17 +23,15 @@ A minimal, general-purpose agent harness written in C#/.NET, providing a foundat
 - `Event` - models session-scoped events used for tracing turn execution, LLM requests and responses, and tool activity.
 - `ApiClient` - wraps communication with a Chat Completions-compatible API in terms of strongly typed `Request` and `Response` classes.
 
-The repo also contains a `Tests` project with a small set of integration-style tests for verifying specific behaviours of the harness, such as prompt caching.  
+The repo also contains a `Tests` project with a small set of integration-style tests for verifying specific behaviours of the harness.  
 
 ## Design Choices
 
 The harness takes an intentionally opinionated approach:
 
 - Only a non-streaming subset of the Chat Completions API is currently supported.
-- `Tools` are organised into named `Toolkits`.
-- Each `Session` selects one `Toolkit` up front, and those tools are provided to the LLM on each turn.
+- `Tools` are organised into named `Toolkits`, which can be changed on each `Turn`.
 - `strict` mode is always used for function tools, in line with OpenAI guidance.
-- `prompt_cache_key` is used to improve the likelihood of prompt caching.
 - Sessions and events are persisted in memory only.
 
 These decisions were made to keep the harness small, focused, and easy to reason about while exploring agentic concepts.
@@ -45,7 +43,7 @@ These instructions assume you have cloned and opened the repository in VS Code.
 To run the harness locally you need:
 
 - .NET 9 SDK.
-- An OpenAI API key stored in the `OPENAI_API_KEY` environment variable.
+- If using OpenAI's hosted Chat Completions API, an API key stored in the `OPENAI_API_KEY` environment variable.
 
 In Visual Studio Code, Run > Start Debugging (or F5); you may be prompted to:
 
@@ -187,13 +185,14 @@ If the session doesn't exist, the API returns `404 Not Found`.
 
 This project is intentionally narrow in scope:
 
+- No safety protections, or concurrency support, have been implemented.
 - Sessions and events are stored in memory only.
 - Only a (non-streaming) subset of the Chat Completions API is supported.
 - Tool selection happens on session creation, rather than dynamically per turn.
 - Tests are minimal and focused on core aspects of harness behaviour.
 - The `Agent` project also hosts the Web UI.
 
-The project is designed as an experimental agent harness only, and is not suitable for production use.
+The project is designed as an experimental agent harness only, and is not suitable for production use or with data you care about.
 
 ## Possible Next Steps
 

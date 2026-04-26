@@ -57,8 +57,7 @@ namespace Core.ChatCompletions
             Choices = json["choices"]?.AsArray()?.Select(c => new ChatCompletionChoice
             {
                 Index = c!["index"]?.GetValue<int>() ?? throw new InvalidOperationException("LLM response choice JSON does not contain 'index' field."),
-                FinishReason = ParseFinishReason(
-                    c["finish_reason"]?.ToString() ?? throw new InvalidOperationException("LLM response choice JSON does not contain 'finish_reason' field.")),
+                FinishReason = ParseFinishReason(c["finish_reason"]?.ToString() ?? throw new InvalidOperationException("LLM response choice JSON does not contain 'finish_reason' field.")),
                 Message = new ChatCompletionMessage
                 {
                     Role = c["message"]?["role"]?.ToString() ?? throw new InvalidOperationException("LLM response choice message JSON does not contain 'role' field."),
@@ -189,8 +188,6 @@ namespace Core.ChatCompletions
         public List<ChatCompletionMessageToolCall>? ToolCalls { get; init; }
     }
 
-    [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
-    [JsonDerivedType(typeof(ChatCompletionMessageFunctionCall), "function")]
     public abstract class ChatCompletionMessageToolCall
     {
         public required string Id { get; init; }

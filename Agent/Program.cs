@@ -1,5 +1,6 @@
 using Core;
 using Core.ChatCompletions;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -8,24 +9,24 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     // Allow enum values in JSON request bodies to be passed as strings (e.g. "Auto").
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
 });
+builder.Services.AddSingleton(new ApiClient(new HttpClient()));
 var app = builder.Build();
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.MapGet("/favicon.ico", () => Results.Redirect("/favicon.svg", permanent: false));
 
-// Default session configuration.
-const string DefaultModel = "gpt-5-nano";
-const string DefaultInstructions = "You are a helpful assistant.";
-const string DefaultPromptCacheKey = "SharpAgentHarness";
-const ServiceTier DefaultTier = ServiceTier.Default;
-const ReasoningEffort DefaultReasoning = ReasoningEffort.Minimal;
-const Verbosity DefaultVerbosity = Verbosity.Low;
-const string DefaultToolkitName = "Default";
-
-// Create a default toolkit with an example function tool.
-Toolkit defaultToolkit = new Toolkit(DefaultToolkitName);
-defaultToolkit.Add(new GetCurrentTimeTool());
-Toolkits.Add(defaultToolkit);
+// Create a toolkit with an example function tool.
+Toolkit defaultToolkit;
+try
+{
+    defaultToolkit = Toolkits.Get("Default");
+}
+catch (KeyNotFoundException)
+{
+    defaultToolkit = new Toolkit("Default");
+    defaultToolkit.Add(new GetCurrentTimeTool());
+    Toolkits.Add(defaultToolkit);
+}
 
 app.MapGet("/api", () =>
 {
@@ -36,24 +37,11 @@ app.MapPost("/api/sessions", (CreateSessionRequest? body) =>
 {
     try
     {
-        Uri chatCompletionsUrl = ResolveChatCompletionsUrl(body?.ChatCompletionsUrl);
+        ArgumentNullException.ThrowIfNull(body);
+        ArgumentException.ThrowIfNullOrEmpty(body.instructions, nameof(body.instructions));
+        ArgumentException.ThrowIfNullOrEmpty(body.chatCompletionsUrl, nameof(body.chatCompletionsUrl));
 
-        Session session = new Session
-        {
-            ChatCompletionsUrl = chatCompletionsUrl,
-            Model = body?.Model ?? DefaultModel,
-            PromptCacheKey = body?.PromptCacheKey ?? DefaultPromptCacheKey,
-            ServiceTier = body?.Tier ?? DefaultTier,
-            ReasoningEffort = body?.Reasoning ?? DefaultReasoning,
-            Verbosity = body?.Verbosity ?? DefaultVerbosity,
-            Toolkit = string.IsNullOrEmpty(body?.ToolkitName) ? defaultToolkit : Toolkits.Get(body.ToolkitName)
-        };
-        session.AddMessage(new ChatCompletionDeveloperMessageParam 
-        { 
-            UseDeveloperMessageInsteadOfSystem = session.ChatCompletionsUrl.ToString() == ApiClient.OpenAIChatCompletionsUrl,
-            Content = body?.Instructions ?? DefaultInstructions
-        });
-        Sessions.CreateSession(session);
+        Session session = Sessions.CreateSession(body.instructions, new Uri(body.chatCompletionsUrl));
         return Results.Ok(MapSessionForApi(session));
     }
     catch (KeyNotFoundException ex)
@@ -104,11 +92,21 @@ app.MapGet("/api/sessions/{sessionId}/events", (Guid sessionId) =>
     }
 });
 
-app.MapPost("/api/sessions/{sessionId}/messages", async (Guid sessionId, SendMessageRequest body) =>
+app.MapPost("/api/sessions/{sessionId}/messages", async (Guid sessionId, SendMessageRequest body, ApiClient apiClient) =>
 {
     try
     {
+        ArgumentException.ThrowIfNullOrEmpty(body.message, nameof(body.message));
+
         Session session = Sessions.GetSession(sessionId);
+        int maxIterations = body.maxIterations ?? 5;
+        if (maxIterations <= 0)
+            throw new ArgumentOutOfRangeException(nameof(body.maxIterations), "MaxIterations must be greater than zero.");
+
+        Toolkit toolkit = string.IsNullOrWhiteSpace(body.toolkit)
+            ? defaultToolkit
+            : Toolkits.Get(body.toolkit);
+
         ChatCompletionUserMessageParam userMessage = new ChatCompletionUserMessageParam
         {
             Content = new List<ChatCompletionContentPart>
@@ -116,7 +114,23 @@ app.MapPost("/api/sessions/{sessionId}/messages", async (Guid sessionId, SendMes
                 new ChatCompletionContentPartText { Text = body.message }
             }
         };
-        ChatCompletionMessage response = await session.RunTurnAsync(userMessage, CancellationToken.None);
+
+        Turn turn = new Turn
+        {
+            Session = session,
+            Toolkit = toolkit,
+            ApiClient = apiClient,
+            ChatCompletionsUri = session.ChatCompletionsUri,
+            MaxIterations = maxIterations,
+            Temperature = body.temperature,
+            Model = body.model,
+            PromptCacheKey = body.promptCacheKey,
+            ReasoningEffort = body.reasoningEffort,
+            Verbosity = body.verbosity,
+            ServiceTier = body.serviceTier,
+            CancellationToken = CancellationToken.None
+        };
+        ChatCompletionMessage response = await turn.RunTurnAsync(userMessage);
 
         return Results.Ok(new { response.Content });
     }
@@ -143,14 +157,8 @@ static object MapSessionForApi(Session session)
     return new
     {
         id = session.Id,
-        chatCompletionsUrl = session.ChatCompletionsUrl.ToString(),
-        model = session.Model,
-        promptCacheKey = session.PromptCacheKey,
-        tier = session.ServiceTier,
-        reasoning = session.ReasoningEffort,
-        verbosity = session.Verbosity,
+        chatCompletionsUrl = session.ChatCompletionsUri.ToString(),
         instructions = instructionsMessage?.Content,
-        toolkitName = session.Toolkit?.Name,
         usageTotals = new
         {
             inputTokens = session.TotalInputTokens,
@@ -172,7 +180,7 @@ static object MapEventForApi(Event evt)
             sessionId = requestReady.Session.Id,
             details = new
             {
-                request = requestReady.Request
+                request = MapRequestForApi(requestReady.Request)
             }
         },
         ResponseReceived responseReceived => new
@@ -221,6 +229,13 @@ static object MapEventForApi(Event evt)
     };
 }
 
+// Convert internal request type to the same JSON shape sent to chat completions.
+static JsonElement MapRequestForApi(Request request)
+{
+    using JsonDocument document = JsonDocument.Parse(request.ToJson());
+    return document.RootElement.Clone();
+}
+
 // Convert internal response type to a stable JSON shape for the web UI.
 static object MapResponseForApi(Response response)
 {
@@ -251,34 +266,17 @@ static object MapResponseForApi(Response response)
     };
 }
 
-static Uri ResolveChatCompletionsUrl(string? requestedUrl)
-{
-    if (string.IsNullOrWhiteSpace(requestedUrl))
-    {
-        return new Uri(ApiClient.OpenAIChatCompletionsUrl);
-    }
+record CreateSessionRequest(string instructions, string chatCompletionsUrl);
 
-    if (Uri.TryCreate(requestedUrl, UriKind.Absolute, out Uri? chatCompletionsUrl))
-    {
-        return chatCompletionsUrl;
-    }
+record SendMessageRequest(
+    string message,
+    int? maxIterations,
+    string? toolkit,
+    double? temperature,
+    string? model,
+    string? promptCacheKey,
+    ReasoningEffort? reasoningEffort,
+    Verbosity? verbosity,
+    ServiceTier? serviceTier);
 
-    throw new ArgumentException("ChatCompletionsUrl must be a valid absolute URL.", nameof(requestedUrl));
-}
-
-record CreateSessionRequest(
-    string? Model,
-    string? Instructions,
-    string? ChatCompletionsUrl,
-    string? PromptCacheKey,
-    ServiceTier? Tier,
-    ReasoningEffort? Reasoning,
-    Verbosity? Verbosity,
-    string? ToolkitName
-);
-
-record SendMessageRequest(string message);
-
-public partial class Program
-{
-}
+public partial class Program;
