@@ -16,16 +16,16 @@ app.UseStaticFiles();
 app.MapGet("/favicon.ico", () => Results.Redirect("/favicon.svg", permanent: false));
 
 // Create a toolkit with an example function tool.
-Toolkit defaultToolkit;
+Toolkit exampleToolkit;
 try
 {
-    defaultToolkit = Toolkits.Get("Default");
+    exampleToolkit = Toolkits.Get("Example");
 }
 catch (KeyNotFoundException)
 {
-    defaultToolkit = new Toolkit("Default");
-    defaultToolkit.Add(new GetCurrentTimeTool());
-    Toolkits.Add(defaultToolkit);
+    exampleToolkit = new Toolkit("Example");
+    exampleToolkit.Add(new GetCurrentTimeTool());
+    Toolkits.Add(exampleToolkit);
 }
 
 app.MapGet("/api", () =>
@@ -103,8 +103,8 @@ app.MapPost("/api/sessions/{sessionId}/messages", async (Guid sessionId, SendMes
         if (maxIterations <= 0)
             throw new ArgumentOutOfRangeException(nameof(body.maxIterations), "MaxIterations must be greater than zero.");
 
-        Toolkit toolkit = string.IsNullOrWhiteSpace(body.toolkit)
-            ? defaultToolkit
+        Toolkit? toolkit = string.IsNullOrEmpty(body.toolkit)
+            ? null
             : Toolkits.Get(body.toolkit);
 
         ChatCompletionUserMessageParam userMessage = new ChatCompletionUserMessageParam

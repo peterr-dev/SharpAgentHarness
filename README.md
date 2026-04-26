@@ -218,22 +218,22 @@ Request body:
 
 - `message` - required user message text.
 - `maxIterations` - optional maximum number of request-response/tool-call loops for the turn. Defaults to `5`.
-- `toolkit` - optional toolkit name for this turn. Defaults to `Default`.
+- `toolkit` - optional toolkit name for this turn.
 - `temperature` - optional temperature passed through to the chat completions request.
-- `model` - optional model name passed through to the chat completions request.
-- `promptCacheKey` - optional prompt cache key passed through to the chat completions request.
+- `model` - optional model name passed through to the chat completions API.
+- `promptCacheKey` - optional prompt cache key passed through to the chat completions API.
 - `reasoningEffort` - optional reasoning setting. Allowed values: `None`, `Minimal`, `Low`, `Medium`, `High`, `XHigh`.
 - `verbosity` - optional verbosity setting. Allowed values: `Low`, `Medium`, `High`.
 - `serviceTier` - optional service tier. Allowed values: `Auto`, `Default`, `Flex`, `Scale`, `Priority`.
 
-The harness creates a `Default` toolkit at startup and registers the example `get_current_time` function tool into it.
+The harness creates an `Example` toolkit at startup and registers the example `get_current_time` function tool into it.
 
 Example request body:
 
 ```json
 {
   "message": "What time is it in UTC?",
-  "toolkit": "Default",
+  "toolkit": "Example",
   "maxIterations": 5,
   "reasoningEffort": "Minimal",
   "verbosity": "Low",
