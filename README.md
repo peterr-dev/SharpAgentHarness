@@ -147,8 +147,8 @@ Current event types include:
 - `TurnStarted`
 - `RequestReady`
 - `RawRequestReady`
-- `ResponseReceived`
 - `RawResponseReceived`
+- `ResponseReceived`
 - `TurnCompleted`
 
 Example response body:
