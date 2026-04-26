@@ -217,7 +217,7 @@ Sends a user message to an existing session.
 Request body:
 
 - `message` - required user message text.
-- `maxIterations` - optional maximum number of request-response/tool-call loops for the turn. Defaults to `5`.
+- `maxIterations` - required maximum number of request -> response -> tool-call loops for the turn.
 - `toolkit` - optional toolkit name for this turn.
 - `temperature` - optional temperature passed through to the chat completions request.
 - `model` - optional model name passed through to the chat completions API.
