@@ -62,6 +62,7 @@ namespace Core.ChatCompletions
                 {
                     Role = c["message"]?["role"]?.ToString() ?? throw new InvalidOperationException("LLM response choice message JSON does not contain 'role' field."),
                     Content = ParseAssistantContent(c["message"]?["content"]),
+                    ReasoningContent = c["message"]?["reasoning_content"]?.ToString() ?? c["message"]?["reasoning"]?.ToString(),
                     Refusal = c["message"]?["refusal"]?.ToString() ?? string.Empty, // 'refusal' is optional and may be empty if the model did not refuse to answer.
                     ToolCalls = c["message"]?["tool_calls"]?.AsArray()?.Select(tc =>
                     {
@@ -182,6 +183,8 @@ namespace Core.ChatCompletions
         public required string Role { get; init; }
 
         public string? Content { get; init; }
+
+        public string? ReasoningContent { get; init; }
 
         public required string Refusal { get; init; }
 
