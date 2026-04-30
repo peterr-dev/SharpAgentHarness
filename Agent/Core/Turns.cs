@@ -42,7 +42,7 @@ namespace Core
 
                     Request request = new Request
                     {
-                        Messages = ProjectRequestMessages(Session.Messages, turnStartIndex)
+                        Messages = BuildRequestMessages(Session.Messages, turnStartIndex)
                     };
 
                     if (Toolkit != null)
@@ -149,16 +149,17 @@ namespace Core
             }
         }
 
-        private static List<ChatCompletionMessageParam> ProjectRequestMessages(List<ChatCompletionMessageParam> sourceMessages, int turnStartIndex)
+        // Build the messages for the next request based on the Session; we clone messages as some need to be modified, specifically removing reasoning from prior turns
+        private static List<ChatCompletionMessageParam> BuildRequestMessages(List<ChatCompletionMessageParam> sourceMessages, int turnStartIndex)
         {
-            List<ChatCompletionMessageParam> projectedMessages = new List<ChatCompletionMessageParam>(sourceMessages.Count);
+            List<ChatCompletionMessageParam> messagesForNextRequest = new List<ChatCompletionMessageParam>(sourceMessages.Count);
 
             for (int index = 0; index < sourceMessages.Count; index++)
             {
-                projectedMessages.Add(CloneMessageForRequest(sourceMessages[index], index, turnStartIndex));
+                messagesForNextRequest.Add(CloneMessageForRequest(sourceMessages[index], index, turnStartIndex));
             }
 
-            return projectedMessages;
+            return messagesForNextRequest;
         }
 
         private static ChatCompletionMessageParam CloneMessageForRequest(ChatCompletionMessageParam message, int index, int turnStartIndex)
@@ -190,6 +191,7 @@ namespace Core
 
             if (index < turnStartIndex)
             {
+                // Omit reasoning from prior turns.
                 return new ChatCompletionAssistantMessageParam
                 {
                     Content = content,
