@@ -185,6 +185,8 @@ namespace Core.ChatCompletions
     {
         public List<ChatCompletionContentPart>? Content { get; init; }
 
+        public string? ReasoningContent { get; init; }
+
         public List<ChatCompletionMessageToolCall>? ToolCalls { get; init; }
 
         public override JsonObject ToJson()
@@ -198,6 +200,11 @@ namespace Core.ChatCompletions
             if (ToolCalls != null)
             {
                 result["tool_calls"] = new JsonArray(ToolCalls.ConvertAll(tc => (JsonNode?)tc.ToJson()).ToArray());
+            }
+
+            if (!string.IsNullOrEmpty(ReasoningContent))
+            {
+                result["reasoning_content"] = ReasoningContent;
             }
 
             return result;
