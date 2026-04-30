@@ -259,7 +259,7 @@ static object MapResponseForApi(Response response)
             @object = success.Object,
             created = success.Created,
             model = success.Model,
-            choices = success.Choices,
+            choices = success.Choices.Select(MapChoiceForApi).ToList(),
             usage = success.Usage
         },
         ErrorResponse error => new
@@ -273,6 +273,43 @@ static object MapResponseForApi(Response response)
         _ => new
         {
             type = response.GetType().Name
+        }
+    };
+}
+
+
+static object MapChoiceForApi(ChatCompletionChoice choice)
+{
+    return new
+    {
+        index = choice.Index,
+        finishReason = choice.FinishReason.ToString(),
+        message = new
+        {
+            role = choice.Message.Role,
+            content = choice.Message.Content,
+            reasoningContent = choice.Message.ReasoningContent,
+            refusal = choice.Message.Refusal,
+            toolCalls = choice.Message.ToolCalls?.Select(MapToolCallForApi).ToList()
+        }
+    };
+}
+
+static object MapToolCallForApi(ChatCompletionMessageToolCall toolCall)
+{
+    return toolCall switch
+    {
+        ChatCompletionMessageFunctionCall functionCall => new
+        {
+            type = "function",
+            id = functionCall.Id,
+            functionName = functionCall.FunctionName,
+            arguments = functionCall.Arguments
+        },
+        _ => new
+        {
+            type = toolCall.GetType().Name,
+            id = toolCall.Id
         }
     };
 }
