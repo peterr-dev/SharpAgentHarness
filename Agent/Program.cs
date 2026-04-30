@@ -4,12 +4,23 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
+TimeSpan? chatCompletionsTimeout = builder.Configuration.GetValue<TimeSpan?>("ChatCompletions:Timeout");
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     // Allow enum values in JSON request bodies to be passed as strings (e.g. "Auto").
     options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
 });
-builder.Services.AddSingleton(new ApiClient(new HttpClient()));
+builder.Services.AddHttpClient<ApiClient>(httpClient =>
+{
+    // Allow the chat completions HTTP timeout to be configured per environment.
+    if (chatCompletionsTimeout is TimeSpan timeout)
+    {
+        if (timeout <= TimeSpan.Zero)
+            throw new InvalidOperationException("ChatCompletions:Timeout must be greater than zero.");
+
+        httpClient.Timeout = timeout;
+    }
+});
 var app = builder.Build();
 app.UseHttpsRedirection();
 app.UseStaticFiles();

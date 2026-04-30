@@ -44,6 +44,7 @@ To run the harness locally you need:
 
 - .NET 9 SDK.
 - If using OpenAI's hosted Chat Completions API, an API key stored in the `OPENAI_API_KEY` environment variable.
+- Optionally, override `ChatCompletions:Timeout` (for example `00:02:00`) if you need a different HTTP client timeout than the default `00:01:40`.
 
 In Visual Studio Code, Run > Start Debugging (or F5); you may be prompted to:
 
