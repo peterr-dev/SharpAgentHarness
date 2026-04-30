@@ -32,6 +32,7 @@ namespace Core
         public async Task<ChatCompletionMessage> RunTurnAsync(ChatCompletionMessageParam message)
         {
             HookRegistry.RunTurnStartedHooks(Session);
+            int turnStartIndex = Session.Messages.Count;
 
             try
             {
@@ -41,7 +42,7 @@ namespace Core
 
                     Request request = new Request
                     {
-                        Messages = Session.Messages.ToList()
+                        Messages = ProjectRequestMessages(Session.Messages, turnStartIndex)
                     };
 
                     if (Toolkit != null)
@@ -146,6 +147,76 @@ namespace Core
             {
                 HookRegistry.RunTurnCompletedHooks(Session);
             }
+        }
+
+        private static List<ChatCompletionMessageParam> ProjectRequestMessages(List<ChatCompletionMessageParam> sourceMessages, int turnStartIndex)
+        {
+            List<ChatCompletionMessageParam> projectedMessages = new List<ChatCompletionMessageParam>(sourceMessages.Count);
+
+            for (int index = 0; index < sourceMessages.Count; index++)
+            {
+                projectedMessages.Add(CloneMessageForRequest(sourceMessages[index], index, turnStartIndex));
+            }
+
+            return projectedMessages;
+        }
+
+        private static ChatCompletionMessageParam CloneMessageForRequest(ChatCompletionMessageParam message, int index, int turnStartIndex)
+        {
+            return message switch
+            {
+                ChatCompletionDeveloperMessageParam developerMessage => new ChatCompletionDeveloperMessageParam
+                {
+                    Content = developerMessage.Content
+                },
+                ChatCompletionUserMessageParam userMessage => new ChatCompletionUserMessageParam
+                {
+                    Content = userMessage.Content.ToList()
+                },
+                ChatCompletionToolMessageParam toolMessage => new ChatCompletionToolMessageParam
+                {
+                    ToolCallId = toolMessage.ToolCallId,
+                    Content = toolMessage.Content
+                },
+                ChatCompletionAssistantMessageParam assistantMessage => CreateAssistantRequestMessage(assistantMessage, index, turnStartIndex),
+                _ => throw new InvalidOperationException($"Unsupported message type: {message.GetType().Name}")
+            };
+        }
+
+        private static ChatCompletionAssistantMessageParam CreateAssistantRequestMessage(ChatCompletionAssistantMessageParam assistantMessage, int index, int turnStartIndex)
+        {
+            List<ChatCompletionMessageToolCall>? toolCalls = assistantMessage.ToolCalls?.Select(CloneToolCall).ToList();
+            List<ChatCompletionContentPart>? content = assistantMessage.Content?.ToList();
+
+            if (index < turnStartIndex)
+            {
+                return new ChatCompletionAssistantMessageParam
+                {
+                    Content = content,
+                    ToolCalls = toolCalls
+                };
+            }
+
+            return new ChatCompletionAssistantMessageParam
+            {
+                Content = content,
+                ToolCalls = toolCalls,
+                ReasoningContent = assistantMessage.ReasoningContent
+            };
+        }
+
+        private static ChatCompletionMessageToolCall CloneToolCall(ChatCompletionMessageToolCall toolCall)
+        {
+            return toolCall switch
+            {
+                ChatCompletionMessageFunctionCall functionCall => new ChatCompletionMessageFunctionCall
+                {
+                    Id = functionCall.Id,
+                    FunctionName = functionCall.FunctionName,
+                    Arguments = functionCall.Arguments
+                },
+                _ => throw new InvalidOperationException($"Unsupported tool call type: {toolCall.GetType().Name}")
+            };
         }
     }
 }
