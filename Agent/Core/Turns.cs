@@ -95,6 +95,13 @@ namespace Core
                             if (choice.Message.ToolCalls is null || choice.Message.ToolCalls.Count == 0)
                                 throw new InvalidOperationException("LLM response indicated tool calls but did not contain any tool calls.");
 
+                            Session.Messages.Add(new ChatCompletionAssistantMessageParam
+                            {
+                                Content = null,
+                                ToolCalls = choice.Message.ToolCalls.ToList(),
+                                ReasoningContent = choice.Message.ReasoningContent
+                            });
+
                             foreach (ChatCompletionMessageToolCall toolCall in choice.Message.ToolCalls)
                             {
                                 if (toolCall is ChatCompletionMessageFunctionCall functionCall)
@@ -102,12 +109,6 @@ namespace Core
                                     ChatCompletionFunctionTool? functionTool = Toolkit?.Tools.OfType<ChatCompletionFunctionTool>().FirstOrDefault(t => t.Name.Equals(functionCall.FunctionName, StringComparison.OrdinalIgnoreCase));
                                     if (functionTool is not null)
                                     {
-                                        Session.Messages.Add(new ChatCompletionAssistantMessageParam
-                                        {
-                                            Content = null,
-                                            ToolCalls = new List<ChatCompletionMessageToolCall> { functionCall }
-                                        });
-
                                         string toolResponse = await functionTool.ExecuteAsync(functionCall.Arguments ?? string.Empty);
 
                                         ChatCompletionToolMessageParam toolCallResultsMessage = new ChatCompletionToolMessageParam
