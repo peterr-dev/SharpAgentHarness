@@ -303,7 +303,7 @@ static object MapToolCallForApi(ChatCompletionMessageToolCall toolCall)
         {
             type = "function",
             id = functionCall.Id,
-            functionName = functionCall.FunctionName,
+            name = functionCall.FunctionName,
             arguments = functionCall.Arguments
         },
         _ => new
