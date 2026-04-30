@@ -263,6 +263,109 @@ public class HarnessTests
         Assert.Equal("""{"role":"assistant","content":null,"tool_calls":[{"id":"call_1","type":"function","function":{"name":"first_tool","arguments":"{}"}},{"id":"call_2","type":"function","function":{"name":"second_tool","arguments":"{}"}}],"reasoning_content":"multi-tool reasoning"}""", assistantMessage.ToJson().ToJsonString());
     }
 
+    [Fact]
+    public async Task ActiveTurnReplayIncludesReasoningAndToolMessageButNextUserTurnSuppressesPriorReasoning()
+    {
+        // Arrange
+        const string expectedRequest1Body = """{"messages":[{"role":"developer","content":"You are a concise test assistant."},{"role":"user","content":[{"type":"text","text":"What is the current time in UTC?"}]}],"tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}]}""";
+        const string expectedRequest2Body = """{"messages":[{"role":"developer","content":"You are a concise test assistant."},{"role":"user","content":[{"type":"text","text":"What is the current time in UTC?"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_utc_1","type":"function","function":{"name":"get_current_time","arguments":"{\u0022timezone\u0022:\u0022UTC\u0022}"}}],"reasoning_content":"thinking-about-time"},{"role":"tool","tool_call_id":"call_utc_1","content":"2026-04-20T12:34:56.0000000\u002B00:00"}],"tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}]}""";
+        const string expectedRequest3Body = """{"messages":[{"role":"developer","content":"You are a concise test assistant."},{"role":"user","content":[{"type":"text","text":"What is the current time in UTC?"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_utc_1","type":"function","function":{"name":"get_current_time","arguments":"{\u0022timezone\u0022:\u0022UTC\u0022}"}}]},{"role":"tool","tool_call_id":"call_utc_1","content":"2026-04-20T12:34:56.0000000\u002B00:00"},{"role":"assistant","content":[{"type":"text","text":"The current UTC time is 2026-04-20T12:34:56.0000000\u002B00:00."}]},{"role":"user","content":[{"type":"text","text":"Thanks"}]}],"tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}]}""";
+        const string toolCallResponseBody = """{"id":"chatcmpl_tool_1","object":"chat.completion","created":1710002001,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"tool_calls","message":{"role":"assistant","content":null,"reasoning_content":"thinking-about-time","refusal":"","tool_calls":[{"id":"call_utc_1","type":"function","function":{"name":"get_current_time","arguments":"{\"timezone\":\"UTC\"}"}}]}}],"usage":{"prompt_tokens":34,"completion_tokens":9,"total_tokens":43,"prompt_tokens_details":{"cached_tokens":3},"completion_tokens_details":{"reasoning_tokens":2}}}""";
+        const string toolResultResponseBody = """{"id":"chatcmpl_tool_2","object":"chat.completion","created":1710002002,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"The current UTC time is 2026-04-20T12:34:56.0000000+00:00.","refusal":""}}],"usage":{"prompt_tokens":46,"completion_tokens":12,"total_tokens":58,"prompt_tokens_details":{"cached_tokens":4},"completion_tokens_details":{"reasoning_tokens":3}}}""";
+        const string thanksResponseBody = """{"id":"chatcmpl_tool_3","object":"chat.completion","created":1710002003,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"You are welcome.","refusal":""}}],"usage":{"prompt_tokens":52,"completion_tokens":5,"total_tokens":57,"prompt_tokens_details":{"cached_tokens":5},"completion_tokens_details":{"reasoning_tokens":1}}}""";
+        const string fixedUtcNow = "2026-04-20T12:34:56.0000000+00:00";
+
+        StaticGetCurrentTimeTool staticTimeTool = new StaticGetCurrentTimeTool(fixedUtcNow);
+        Toolkit toolkit = new Toolkit("tests-e2e-tools");
+        toolkit.Add(staticTimeTool);
+
+        await using FakeApiClientServer server = await FakeApiClientServer.StartAsync(
+            new Dictionary<string, string>
+            {
+                [expectedRequest1Body] = toolCallResponseBody,
+                [expectedRequest2Body] = toolResultResponseBody,
+                [expectedRequest3Body] = thanksResponseBody
+            });
+
+        Session session = Sessions.CreateSession("You are a concise test assistant.", server.ChatCompletionsUri);
+        Turn CreateTurn() => new Turn
+        {
+            Session = session,
+            ApiClient = new ApiClient(server.Client),
+            ChatCompletionsUri = session.ChatCompletionsUri,
+            MaxIterations = 5,
+            CancellationToken = CancellationToken.None,
+            Toolkit = toolkit
+        };
+
+        // Act
+        await CreateTurn().RunTurnAsync(new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "What is the current time in UTC?" }] });
+        await CreateTurn().RunTurnAsync(new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Thanks" }] });
+
+        IReadOnlyList<RawRequestReady> rawRequests = Events.GetEventsForSession<RawRequestReady>(session.Id);
+
+        // Assert active-turn replay includes reasoning_content and corresponding tool result message.
+        Assert.Equal(3, rawRequests.Count);
+        Assert.Equal(expectedRequest2Body, rawRequests[1].RawRequest);
+        Assert.Contains(""""reasoning_content":"thinking-about-time"""", rawRequests[1].RawRequest);
+        Assert.Contains("\"role\":\"tool\",\"tool_call_id\":\"call_utc_1\",\"content\":\"2026-04-20T12:34:56.0000000\\u002B00:00\"}", rawRequests[1].RawRequest);
+
+        // Assert prior-turn reasoning_content is suppressed on next user turn.
+        Assert.Equal(expectedRequest3Body, rawRequests[2].RawRequest);
+        Assert.DoesNotContain("reasoning_content", rawRequests[2].RawRequest);
+    }
+
+    [Fact]
+    public async Task ParsesReasoningAliasAndReplaysAsReasoningContentWithoutChangingNonReasoningFixtures()
+    {
+        // Arrange
+        const string expectedRequest1Body = """{"messages":[{"role":"developer","content":"You are a concise test assistant."},{"role":"user","content":[{"type":"text","text":"What is the current time in UTC?"}]}],"tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}]}""";
+        const string expectedRequest2Body = """{"messages":[{"role":"developer","content":"You are a concise test assistant."},{"role":"user","content":[{"type":"text","text":"What is the current time in UTC?"}]},{"role":"assistant","content":null,"tool_calls":[{"id":"call_utc_1","type":"function","function":{"name":"get_current_time","arguments":"{\u0022timezone\u0022:\u0022UTC\u0022}"}}],"reasoning_content":"alias-thinking"},{"role":"tool","tool_call_id":"call_utc_1","content":"2026-04-20T12:34:56.0000000\u002B00:00"}],"tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}]}""";
+        const string aliasToolCallResponseBody = """{"id":"chatcmpl_alias_1","object":"chat.completion","created":1710003001,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"tool_calls","message":{"role":"assistant","content":null,"reasoning":"alias-thinking","refusal":"","tool_calls":[{"id":"call_utc_1","type":"function","function":{"name":"get_current_time","arguments":"{\"timezone\":\"UTC\"}"}}]}}],"usage":{"prompt_tokens":34,"completion_tokens":9,"total_tokens":43}}""";
+        const string stopResponseBody = """{"id":"chatcmpl_alias_2","object":"chat.completion","created":1710003002,"model":"gpt-5-nano","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"The current UTC time is 2026-04-20T12:34:56.0000000+00:00.","refusal":""}}],"usage":{"prompt_tokens":46,"completion_tokens":12,"total_tokens":58}}""";
+        const string fixedUtcNow = "2026-04-20T12:34:56.0000000+00:00";
+
+        StaticGetCurrentTimeTool staticTimeTool = new StaticGetCurrentTimeTool(fixedUtcNow);
+        Toolkit toolkit = new Toolkit("tests-e2e-tools");
+        toolkit.Add(staticTimeTool);
+
+        Response parsedResponse = Response.Parse(aliasToolCallResponseBody);
+        SuccessResponse parsedSuccessResponse = Assert.IsType<SuccessResponse>(parsedResponse);
+        ChatCompletionChoice parsedChoice = Assert.Single(parsedSuccessResponse.Choices);
+        Assert.Equal("alias-thinking", parsedChoice.Message.ReasoningContent);
+
+        await using FakeApiClientServer server = await FakeApiClientServer.StartAsync(
+            new Dictionary<string, string>
+            {
+                [expectedRequest1Body] = aliasToolCallResponseBody,
+                [expectedRequest2Body] = stopResponseBody
+            });
+
+        Session session = Sessions.CreateSession("You are a concise test assistant.", server.ChatCompletionsUri);
+        Turn turn = new Turn
+        {
+            Session = session,
+            ApiClient = new ApiClient(server.Client),
+            ChatCompletionsUri = session.ChatCompletionsUri,
+            MaxIterations = 5,
+            CancellationToken = CancellationToken.None,
+            Toolkit = toolkit
+        };
+
+        // Act
+        ChatCompletionMessage response = await turn.RunTurnAsync(new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "What is the current time in UTC?" }] });
+        IReadOnlyList<RawRequestReady> rawRequests = Events.GetEventsForSession<RawRequestReady>(session.Id);
+
+        // Assert: alias input is normalised to outbound reasoning_content.
+        Assert.Equal(2, rawRequests.Count);
+        Assert.Equal(expectedRequest2Body, rawRequests[1].RawRequest);
+        Assert.Contains(""""reasoning_content":"alias-thinking"""", rawRequests[1].RawRequest);
+
+        // Assert: non-reasoning final response remains free of reasoning payload in user-facing API.
+        Assert.Equal("The current UTC time is 2026-04-20T12:34:56.0000000+00:00.", response.Content);
+        Assert.DoesNotContain("reasoning_content", stopResponseBody);
+    }
+
      private sealed class StaticGetCurrentTimeTool : ChatCompletionFunctionTool
     {
         private readonly string _fixedIsoTime;
