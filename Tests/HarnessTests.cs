@@ -108,6 +108,40 @@ public class HarnessTests
             request.ToJson());
     }
 
+
+    [Fact]
+    public void RequestSerialisesJsonSchemaStructuredOutputWithToolsAndMessagesUnchanged()
+    {
+        StaticGetCurrentTimeTool tool = new StaticGetCurrentTimeTool("2026-04-20T12:34:56.0000000+00:00");
+
+        Request request = new OpenAiRequest
+        {
+            Messages =
+            [
+                new ChatCompletionDeveloperMessageParam
+                {
+                    Content = "You are a helpful assistant."
+                },
+                new ChatCompletionUserMessageParam
+                {
+                    Content = [new ChatCompletionContentPartText { Text = "Hello!" }]
+                }
+            ],
+            Tools = [tool],
+            StructuredOutput = new StructuredOutputOptions
+            {
+                OutputMode = "json_schema",
+                JsonSchemaName = "math_answer",
+                JsonSchema = JsonDocument.Parse("""{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}""").RootElement,
+                JsonStrict = true
+            }
+        };
+
+        Assert.Equal(
+            """{"messages":[{"role":"developer","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"Hello!"}]}],"tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}],"response_format":{"type":"json_schema","json_schema":{"name":"math_answer","schema":{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false},"strict":true}}}""",
+            request.ToJson());
+    }
+
     [Fact]
     public async Task SingleTurnSession()
     {

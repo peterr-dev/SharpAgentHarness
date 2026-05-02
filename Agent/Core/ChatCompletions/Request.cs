@@ -112,7 +112,12 @@ namespace Core.ChatCompletions
 
         private void AddStructuredOutputFields(JsonObject body)
         {
-            if (!string.Equals(StructuredOutput?.OutputMode, "json_schema", StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrWhiteSpace(StructuredOutput?.OutputMode))
+            {
+                return;
+            }
+
+            if (!string.Equals(StructuredOutput.OutputMode, "json_schema", StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
