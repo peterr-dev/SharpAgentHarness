@@ -18,10 +18,7 @@ namespace Core
         public Toolkit? Toolkit { get; init; }
 
         public required RequestModel RequestModel { get; init; }
-        public StructuredOutputOptions? StructuredOutput { get; init; }
-        public OpenAiRequestOptions? OpenAi { get; init; }
-        public GptOssRequestOptions? GptOss { get; init; }
-        public QwenRequestOptions? Qwen { get; init; }
+        public required TurnOptions Options { get; init; }
 
         public async Task<ChatCompletionMessage> RunTurnAsync(ChatCompletionMessageParam message)
         {
@@ -38,10 +35,7 @@ namespace Core
                         RequestModel,
                         BuildRequestMessages(Session.Messages, turnStartIndex),
                         Toolkit?.Tools,
-                        StructuredOutput,
-                        OpenAi,
-                        GptOss,
-                        Qwen);
+                        Options);
 
                     HookRegistry.RunRequestReadyHooks(Session, request);
 

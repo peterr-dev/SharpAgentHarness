@@ -36,41 +36,46 @@ namespace Core.ChatCompletions
         public bool? EnableThinking { get; init; }
     }
 
+    public sealed class TurnOptions
+    {
+        public StructuredOutputOptions? StructuredOutput { get; init; }
+        public OpenAiRequestOptions? OpenAi { get; init; }
+        public GptOssRequestOptions? GptOss { get; init; }
+        public QwenRequestOptions? Qwen { get; init; }
+    }
+
     public static class RequestFactory
     {
         public static Request Create(
             RequestModel requestModel,
             List<ChatCompletionMessageParam> messages,
             List<ChatCompletionTool>? tools,
-            StructuredOutputOptions? structuredOutput,
-            OpenAiRequestOptions? openAi,
-            GptOssRequestOptions? gptOss,
-            QwenRequestOptions? qwen)
+            TurnOptions options)
         {
             Request request = requestModel switch
             {
                 RequestModel.OpenAi => new OpenAiRequest
                 {
-                    Model = openAi?.ModelName,
-                    ReasoningEffort = openAi?.ReasoningEffort,
-                    Verbosity = openAi?.Verbosity,
-                    ServiceTier = openAi?.ServiceTier,
-                    PromptCacheKey = openAi?.PromptCacheKey
+                    Model = options.OpenAi?.ModelName,
+                    ReasoningEffort = options.OpenAi?.ReasoningEffort,
+                    Verbosity = options.OpenAi?.Verbosity,
+                    ServiceTier = options.OpenAi?.ServiceTier,
+                    PromptCacheKey = options.OpenAi?.PromptCacheKey
                 },
                 RequestModel.GptOss => new GptOssRequest
                 {
-                    ReasoningEffort = gptOss?.ReasoningEffort
+                    ReasoningEffort = options.GptOss?.ReasoningEffort
                 },
                 RequestModel.Qwen36 => new QwenRequest
                 {
-                    EnableThinking = qwen?.EnableThinking
+                    EnableThinking = options.Qwen?.EnableThinking
                 },
                 _ => throw new InvalidOperationException($"Unsupported model: {requestModel}")
             };
 
             request.Messages = messages;
             request.Tools = tools ?? new List<ChatCompletionTool>();
-            request.StructuredOutput = structuredOutput;
+            request.StructuredOutput = options.StructuredOutput;
             return request;
         }
     }
