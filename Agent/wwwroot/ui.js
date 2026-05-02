@@ -18,11 +18,11 @@ const requestDefinitions = {
     path: '/sessions/{sessionId}/messages',
     fields: [
       { key: 'sessionId', label: 'Session ID', type: 'text', placeholder: 'GUID', required: true },
+      { key: 'model', label: 'Model Family', type: 'select', options: ['OpenAi', 'GptOss', 'Qwen36'], defaultValue: 'OpenAi' },
       { key: 'message', label: 'Message', type: 'textarea', placeholder: 'Hello there', required: true },
       { key: 'maxIterations', label: 'Max Iterations', type: 'text', placeholder: '5', defaultValue: '5' },
       { key: 'toolkit', label: 'Toolkit', type: 'text', placeholder: 'Example', defaultValue: 'Example' },
-      { key: 'model', label: 'Model Family', type: 'select', options: ['OpenAi', 'GptOss', 'Qwen36'], defaultValue: 'OpenAi' },
-      { key: 'modelName', label: 'Model Name', type: 'text', placeholder: 'gpt-5.1', defaultValue: 'gpt-5.1' },
+      { key: 'modelName', label: 'Model Name', type: 'text', defaultValue: 'gpt-5.1-nano' },
       { key: 'temperature', label: 'Temperature', type: 'text' },
       { key: 'promptCacheKey', label: 'Prompt Cache Key', type: 'text', placeholder: 'SharpAgentHarness', defaultValue: 'SharpAgentHarness' },
       {
