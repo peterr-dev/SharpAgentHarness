@@ -50,9 +50,7 @@ app.MapPost("/api/sessions", (CreateSessionRequest? body) =>
     {
         ArgumentNullException.ThrowIfNull(body);
         ArgumentException.ThrowIfNullOrEmpty(body.instructions, nameof(body.instructions));
-        ArgumentException.ThrowIfNullOrEmpty(body.chatCompletionsUrl, nameof(body.chatCompletionsUrl));
-
-        Session session = Sessions.CreateSession(body.instructions, new Uri(body.chatCompletionsUrl));
+        Session session = Sessions.CreateSession(body.instructions);
         return Results.Ok(MapSessionForApi(session));
     }
     catch (KeyNotFoundException ex)
@@ -131,7 +129,7 @@ app.MapPost("/api/sessions/{sessionId}/messages", async (Guid sessionId, SendMes
             Session = session,
             Toolkit = toolkit,
             ApiClient = apiClient,
-            ChatCompletionsUri = session.ChatCompletionsUri,
+            ChatCompletionsUri = GetChatCompletionsUri(body.model),
             MaxIterations = maxIterations,
             RequestModel = body.model,
             OpenAi = body.openAi is null ? null : new OpenAiRequestOptions
@@ -179,7 +177,6 @@ static object MapSessionForApi(Session session)
     return new
     {
         id = session.Id,
-        chatCompletionsUrl = session.ChatCompletionsUri.ToString(),
         instructions = instructionsMessage?.Content,
         usageTotals = new
         {
@@ -252,6 +249,19 @@ static object MapEventForApi(Event evt)
 }
 
 // Convert internal request type to the same JSON shape sent to chat completions.
+static Uri GetChatCompletionsUri(RequestModel model)
+{
+    string uri = model switch
+    {
+        RequestModel.OpenAi => "https://api.openai.com/v1/chat/completions",
+        RequestModel.GptOss => "http://localhost:8080/chat/completions",
+        RequestModel.Qwen36 => "http://localhost:8080/chat/completions",
+        _ => throw new InvalidOperationException($"Unsupported model: {model}")
+    };
+
+    return new Uri(uri);
+}
+
 static JsonElement MapRequestForApi(Request request)
 {
     using JsonDocument document = JsonDocument.Parse(request.ToJson());
@@ -325,7 +335,7 @@ static object MapToolCallForApi(ChatCompletionMessageToolCall toolCall)
     };
 }
 
-record CreateSessionRequest(string instructions, string chatCompletionsUrl);
+record CreateSessionRequest(string instructions);
 
 record SendMessageRequest(
     string message,
