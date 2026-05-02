@@ -13,7 +13,7 @@ public class HarnessTests
     [Fact]
     public void RequestSerialisesHostedReasoningEffortAtTopLevel()
     {
-        Request request = new Request
+        Request request = new OpenAiRequest
         {
             Messages =
             [
@@ -26,7 +26,7 @@ public class HarnessTests
                     Content = [new ChatCompletionContentPartText { Text = "Hello!" }]
                 }
             ],
-            ReasoningEffort = ReasoningEffort.XHigh
+            ReasoningEffort = OpenAiReasoningEffort.XHigh
         };
 
         Assert.Equal(
@@ -37,7 +37,7 @@ public class HarnessTests
     [Fact]
     public void RequestSerialisesLocalReasoningEffortUnderChatTemplateKwargs()
     {
-        Request request = new Request
+        Request request = new GptOssRequest
         {
             Messages =
             [
@@ -50,7 +50,7 @@ public class HarnessTests
                     Content = [new ChatCompletionContentPartText { Text = "Hello!" }]
                 }
             ],
-            LocalReasoningEffort = LocalReasoningEffort.High
+            ReasoningEffort = GptOssReasoningEffort.High
         };
 
         Assert.Equal(
@@ -63,7 +63,7 @@ public class HarnessTests
     {
         StaticGetCurrentTimeTool tool = new StaticGetCurrentTimeTool("2026-04-20T12:34:56.0000000+00:00");
 
-        Request request = new Request
+        Request request = new GptOssRequest
         {
             Messages =
             [
@@ -76,20 +76,19 @@ public class HarnessTests
                     Content = [new ChatCompletionContentPartText { Text = "Hello!" }]
                 }
             ],
-            Temperature = 0.7,
             Tools = [tool],
-            LocalReasoningEffort = LocalReasoningEffort.High
+            ReasoningEffort = GptOssReasoningEffort.High
         };
 
         Assert.Equal(
-            """{"messages":[{"role":"developer","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"Hello!"}]}],"temperature":0.7,"tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}],"chat_template_kwargs":{"reasoning_effort":"high"}}""",
+            """{"messages":[{"role":"developer","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"Hello!"}]}],"tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}],"chat_template_kwargs":{"reasoning_effort":"high"}}""",
             request.ToJson());
     }
 
     [Fact]
     public void RequestOmitsChatTemplateKwargsWhenLocalReasoningEffortIsUnset()
     {
-        Request request = new Request
+        Request request = new GptOssRequest
         {
             Messages =
             [
@@ -131,6 +130,7 @@ public class HarnessTests
             ApiClient = apiClient,
             ChatCompletionsUri = session.ChatCompletionsUri,
             MaxIterations = 5,
+            RequestModel = RequestModel.OpenAi,
             CancellationToken = CancellationToken.None
         };
         ChatCompletionMessage response = await turn.RunTurnAsync(userMessage);
@@ -190,8 +190,11 @@ public class HarnessTests
                         ChatCompletionsUri = session.ChatCompletionsUri,
                         MaxIterations = 5,
                         CancellationToken = CancellationToken.None,
-                        ReasoningEffort = ReasoningEffort.Minimal,
-                        LocalReasoningEffort = LocalReasoningEffort.High
+                        RequestModel = RequestModel.GptOss,
+                        GptOss = new GptOssRequestOptions
+                        {
+                            ReasoningEffort = GptOssReasoningEffort.High
+                        }
                 };
 
                 ChatCompletionMessage response = await turn.RunTurnAsync(new ChatCompletionUserMessageParam
@@ -325,10 +328,11 @@ public class HarnessTests
             ChatCompletionsUri = session.ChatCompletionsUri,
             MaxIterations = 5,
             CancellationToken = CancellationToken.None,
-            Toolkit = toolkit
+            Toolkit = toolkit,
+            RequestModel = RequestModel.OpenAi
         };
 
-        Request CreateExpectedRequest(List<ChatCompletionMessageParam> messages) => new Request
+        Request CreateExpectedRequest(List<ChatCompletionMessageParam> messages) => new OpenAiRequest
         {
             Messages = messages,
             Tools = toolkit.Tools
@@ -453,7 +457,8 @@ public class HarnessTests
             ChatCompletionsUri = session.ChatCompletionsUri,
             MaxIterations = 5,
             CancellationToken = CancellationToken.None,
-            Toolkit = toolkit
+            Toolkit = toolkit,
+            RequestModel = RequestModel.OpenAi
         };
 
         // Act
@@ -507,7 +512,8 @@ public class HarnessTests
             ChatCompletionsUri = session.ChatCompletionsUri,
             MaxIterations = 5,
             CancellationToken = CancellationToken.None,
-            Toolkit = toolkit
+            Toolkit = toolkit,
+            RequestModel = RequestModel.OpenAi
         };
 
         // Act

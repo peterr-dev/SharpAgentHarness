@@ -133,13 +133,24 @@ app.MapPost("/api/sessions/{sessionId}/messages", async (Guid sessionId, SendMes
             ApiClient = apiClient,
             ChatCompletionsUri = session.ChatCompletionsUri,
             MaxIterations = maxIterations,
-            Temperature = body.temperature,
-            Model = body.model,
-            PromptCacheKey = body.promptCacheKey,
-            ReasoningEffort = body.reasoningEffort,
-            LocalReasoningEffort = body.localReasoningEffort,
-            Verbosity = body.verbosity,
-            ServiceTier = body.serviceTier,
+            RequestModel = body.model,
+            OpenAi = body.openAi is null ? null : new OpenAiRequestOptions
+            {
+                Temperature = body.openAi.temperature,
+                ModelName = body.modelName,
+                PromptCacheKey = body.openAi.promptCacheKey,
+                ReasoningEffort = body.openAi.reasoningEffort,
+                Verbosity = body.openAi.verbosity,
+                ServiceTier = body.openAi.serviceTier
+            },
+            GptOss = body.gptOss is null ? null : new GptOssRequestOptions
+            {
+                ReasoningEffort = body.gptOss.reasoningEffort
+            },
+            Qwen = body.qwen is null ? null : new QwenRequestOptions
+            {
+                EnableThinking = body.qwen.enableThinking
+            },
             CancellationToken = CancellationToken.None
         };
         ChatCompletionMessage response = await turn.RunTurnAsync(userMessage);
@@ -321,12 +332,23 @@ record SendMessageRequest(
     string message,
     int maxIterations,
     string? toolkit,
+    RequestModel model,
+    string? modelName,
+    OpenAiOptions? openAi,
+    GptOssOptions? gptOss,
+    QwenOptions? qwen);
+
+record OpenAiOptions(
     double? temperature,
-    string? model,
     string? promptCacheKey,
-    ReasoningEffort? reasoningEffort,
-    LocalReasoningEffort? localReasoningEffort,
+    OpenAiReasoningEffort? reasoningEffort,
     Verbosity? verbosity,
     ServiceTier? serviceTier);
+
+record GptOssOptions(
+    GptOssReasoningEffort? reasoningEffort);
+
+record QwenOptions(
+    bool? enableThinking);
 
 public partial class Program;
