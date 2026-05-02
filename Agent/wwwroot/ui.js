@@ -12,7 +12,7 @@ const requestDefinitions = {
     fields: [
       { key: 'sessionId', label: 'Session ID', type: 'text', placeholder: 'GUID', required: true },
       { key: 'model', label: 'Request Profile', type: 'select', options: ['OpenAi', 'GptOss', 'Qwen36'], defaultValue: 'OpenAi' },
-      { key: 'chatCompletionsUrl', label: 'Chat Completions URL', type: 'text', defaultValue: 'https://api.openai.com/v1/chat/completions', readOnly: true, note: 'Derived from the selected model profile.' },
+      { key: 'chatCompletionsUrl', label: 'Chat Completions URL', type: 'text', defaultValue: 'https://api.openai.com/v1/chat/completions', readOnly: true },
       { key: 'message', label: 'Message', type: 'textarea', placeholder: 'Hello there', required: true },
       { key: 'maxIterations', label: 'Max Iterations', type: 'text', placeholder: '5', defaultValue: '5' },
       { key: 'toolkit', label: 'Toolkit', type: 'text', placeholder: 'Example', defaultValue: 'Example' },
