@@ -131,6 +131,7 @@ public class HarnessTests
             ChatCompletionsUri = server.ChatCompletionsUri,
             MaxIterations = 5,
             RequestModel = RequestModel.OpenAi,
+            Options = new TurnOptions(),
             CancellationToken = CancellationToken.None
         };
         ChatCompletionMessage response = await turn.RunTurnAsync(userMessage);
@@ -191,9 +192,12 @@ public class HarnessTests
                         MaxIterations = 5,
                         CancellationToken = CancellationToken.None,
                         RequestModel = RequestModel.GptOss,
-                        GptOss = new GptOssRequestOptions
+                        Options = new TurnOptions
                         {
-                            ReasoningEffort = GptOssReasoningEffort.High
+                            GptOss = new GptOssRequestOptions
+                            {
+                                ReasoningEffort = GptOssReasoningEffort.High
+                            }
                         }
                 };
 
@@ -329,7 +333,8 @@ public class HarnessTests
             MaxIterations = 5,
             CancellationToken = CancellationToken.None,
             Toolkit = toolkit,
-            RequestModel = RequestModel.OpenAi
+            RequestModel = RequestModel.OpenAi,
+            Options = new TurnOptions()
         };
 
         Request CreateExpectedRequest(List<ChatCompletionMessageParam> messages) => new OpenAiRequest
@@ -458,7 +463,8 @@ public class HarnessTests
             MaxIterations = 5,
             CancellationToken = CancellationToken.None,
             Toolkit = toolkit,
-            RequestModel = RequestModel.OpenAi
+            RequestModel = RequestModel.OpenAi,
+            Options = new TurnOptions()
         };
 
         // Act
@@ -513,7 +519,8 @@ public class HarnessTests
             MaxIterations = 5,
             CancellationToken = CancellationToken.None,
             Toolkit = toolkit,
-            RequestModel = RequestModel.OpenAi
+            RequestModel = RequestModel.OpenAi,
+            Options = new TurnOptions()
         };
 
         // Act
