@@ -17,19 +17,10 @@ namespace Core
 
         public Toolkit? Toolkit { get; init; }
 
-        public double? Temperature { get; init; }
-
-        public string? Model { get; init; }
-
-        public ReasoningEffort? ReasoningEffort { get; init; }
-
-        public LocalReasoningEffort? LocalReasoningEffort { get; init; }
-
-        public Verbosity? Verbosity { get; init; }
-
-        public ServiceTier? ServiceTier { get; init; }
-
-        public string? PromptCacheKey { get; init; }
+        public required RequestModel RequestModel { get; init; }
+        public OpenAiRequestOptions? OpenAi { get; init; }
+        public GptOssRequestOptions? GptOss { get; init; }
+        public QwenRequestOptions? Qwen { get; init; }
 
         public async Task<ChatCompletionMessage> RunTurnAsync(ChatCompletionMessageParam message)
         {
@@ -42,34 +33,13 @@ namespace Core
                 {
                     Session.Messages.Add(message);
 
-                    Request request = new Request
-                    {
-                        Messages = BuildRequestMessages(Session.Messages, turnStartIndex)
-                    };
-
-                    if (Toolkit != null)
-                        request.Tools = Toolkit.Tools;
-
-                    if (Temperature != null)
-                        request.Temperature = Temperature;
-
-                    if (Model != null)
-                        request.Model = Model;
-
-                    if (PromptCacheKey != null)
-                        request.PromptCacheKey = PromptCacheKey;
-
-                    if (ReasoningEffort != null && !UsesLocalChatCompletionsRequestShape(ChatCompletionsUri))
-                        request.ReasoningEffort = ReasoningEffort;
-
-                    if (LocalReasoningEffort != null && UsesLocalChatCompletionsRequestShape(ChatCompletionsUri))
-                        request.LocalReasoningEffort = LocalReasoningEffort;
-
-                    if (Verbosity != null)
-                        request.Verbosity = Verbosity;
-
-                    if (ServiceTier != null)
-                        request.ServiceTier = ServiceTier;
+                    Request request = RequestFactory.Create(
+                        RequestModel,
+                        BuildRequestMessages(Session.Messages, turnStartIndex),
+                        Toolkit?.Tools,
+                        OpenAi,
+                        GptOss,
+                        Qwen);
 
                     HookRegistry.RunRequestReadyHooks(Session, request);
 
@@ -227,13 +197,5 @@ namespace Core
             };
         }
 
-        private static bool UsesLocalChatCompletionsRequestShape(Uri chatCompletionsUri)
-        {
-            return chatCompletionsUri.IsLoopback
-                || string.Equals(chatCompletionsUri.Host, "localhost", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(chatCompletionsUri.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(chatCompletionsUri.Host, "::1", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(chatCompletionsUri.Host, "[::1]", StringComparison.OrdinalIgnoreCase);
-        }
     }
 }

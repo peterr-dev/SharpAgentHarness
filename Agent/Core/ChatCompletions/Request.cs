@@ -2,7 +2,7 @@
 
 namespace Core.ChatCompletions
 {
-    public enum ReasoningEffort
+    public enum OpenAiReasoningEffort
     {
         None,
         Minimal,
@@ -12,7 +12,7 @@ namespace Core.ChatCompletions
         XHigh
     }
 
-    public enum LocalReasoningEffort
+    public enum GptOssReasoningEffort
     {
         Low,
         Medium,
@@ -35,25 +35,11 @@ namespace Core.ChatCompletions
         Priority
     }
 
-    public class Request
+    public abstract class Request
     {
         public List<ChatCompletionMessageParam> Messages { get; set; } = new();
 
         public List<ChatCompletionTool> Tools { get; set; } = new();
-
-        public double? Temperature { get; set; }
-
-        public string? Model { get; set; }
-
-        public ReasoningEffort? ReasoningEffort { get; set; }
-
-        public LocalReasoningEffort? LocalReasoningEffort { get; set; }
-
-        public Verbosity? Verbosity { get; set; }
-
-        public ServiceTier? ServiceTier { get; set; }
-
-        public string? PromptCacheKey { get; set; }
 
         public string ToJson()
         {
@@ -61,24 +47,6 @@ namespace Core.ChatCompletions
             {
                 ["messages"] = new JsonArray(Messages.ConvertAll(m => (JsonNode?)m.ToJson()).ToArray()),
             };
-
-            if (Temperature != null)
-                body["temperature"] = Temperature;
-
-            if (!string.IsNullOrEmpty(Model))
-                body["model"] = Model;
-
-            if (!string.IsNullOrEmpty(PromptCacheKey))
-                body["prompt_cache_key"] = PromptCacheKey;
-
-            if (ReasoningEffort != null)
-                body["reasoning_effort"] = ReasoningEffort.Value.ToString().ToLowerInvariant();
-
-            if (Verbosity != null)
-                body["verbosity"] = Verbosity.Value.ToString().ToLowerInvariant();   
-            
-            if (ServiceTier != null)
-                body["service_tier"] = ServiceTier.Value.ToString().ToLowerInvariant();
 
             Tools.ForEach(tool =>
             {
@@ -132,15 +100,63 @@ namespace Core.ChatCompletions
                 }
             });
 
-            if (LocalReasoningEffort != null)
+            AddModelSpecificFields(body);
+
+            return body.ToJsonString();
+        }
+
+        protected abstract void AddModelSpecificFields(JsonObject body);
+    }
+
+    public sealed class OpenAiRequest : Request
+    {
+        public double? Temperature { get; set; }
+        public string? Model { get; set; }
+        public OpenAiReasoningEffort? ReasoningEffort { get; set; }
+        public Verbosity? Verbosity { get; set; }
+        public ServiceTier? ServiceTier { get; set; }
+        public string? PromptCacheKey { get; set; }
+
+        protected override void AddModelSpecificFields(JsonObject body)
+        {
+            if (Temperature != null) body["temperature"] = Temperature;
+            if (!string.IsNullOrEmpty(Model)) body["model"] = Model;
+            if (!string.IsNullOrEmpty(PromptCacheKey)) body["prompt_cache_key"] = PromptCacheKey;
+            if (ReasoningEffort != null) body["reasoning_effort"] = ReasoningEffort.Value.ToString().ToLowerInvariant();
+            if (Verbosity != null) body["verbosity"] = Verbosity.Value.ToString().ToLowerInvariant();
+            if (ServiceTier != null) body["service_tier"] = ServiceTier.Value.ToString().ToLowerInvariant();
+        }
+    }
+
+    public sealed class GptOssRequest : Request
+    {
+        public GptOssReasoningEffort? ReasoningEffort { get; set; }
+
+        protected override void AddModelSpecificFields(JsonObject body)
+        {
+            if (ReasoningEffort != null)
             {
                 body["chat_template_kwargs"] = new JsonObject
                 {
-                    ["reasoning_effort"] = LocalReasoningEffort.Value.ToString().ToLowerInvariant()
+                    ["reasoning_effort"] = ReasoningEffort.Value.ToString().ToLowerInvariant()
                 };
             }
+        }
+    }
 
-            return body.ToJsonString();
+    public sealed class QwenRequest : Request
+    {
+        public bool? EnableThinking { get; set; }
+
+        protected override void AddModelSpecificFields(JsonObject body)
+        {
+            if (EnableThinking != null)
+            {
+                body["chat_template_kwargs"] = new JsonObject
+                {
+                    ["enable_thinking"] = EnableThinking.Value
+                };
+            }
         }
     }
 

@@ -19,7 +19,8 @@ const requestDefinitions = {
     fields: [
       { key: 'sessionId', label: 'Session ID', type: 'text', placeholder: 'GUID', required: true },
       { key: 'message', label: 'Message', type: 'textarea', placeholder: 'Hello there', required: true },
-      { key: 'model', label: 'Model', type: 'text', placeholder: 'gpt-5-nano', defaultValue: 'gpt-5-nano' },
+      { key: 'model', label: 'Model Family', type: 'select', options: ['OpenAi', 'GptOss', 'Qwen36'], defaultValue: 'OpenAi' },
+      { key: 'modelName', label: 'Model Name', type: 'text', placeholder: 'gpt-5.1', defaultValue: 'gpt-5.1' },
       { key: 'temperature', label: 'Temperature', type: 'text' },
       { key: 'maxIterations', label: 'Max Iterations', type: 'text', placeholder: '5', defaultValue: '5' },
       { key: 'toolkit', label: 'Toolkit', type: 'text', placeholder: 'Example', defaultValue: 'Example' },
@@ -39,12 +40,13 @@ const requestDefinitions = {
         defaultValue: 'Minimal'
       },
       {
-        key: 'localReasoningEffort',
-        label: 'Local Reasoning Effort',
+        key: 'gptOssReasoningEffort',
+        label: 'GPT-OSS Reasoning Effort',
         type: 'select',
         options: ['Low', 'Medium', 'High'],
         defaultValue: 'Medium'
       },
+      { key: 'enableThinking', label: 'Qwen Enable Thinking', type: 'select', options: ['true', 'false'], defaultValue: 'true' },
       {
         key: 'verbosity',
         label: 'Text Verbosity',
@@ -76,8 +78,9 @@ const cachePill = document.getElementById('cachePill');
 const responseBody = document.getElementById('responseBody');
 const copyBtn = document.getElementById('copyBtn');
 
-const openAiHostedOnlyFieldKeys = ['model', 'promptCacheKey', 'serviceTier', 'reasoningEffort', 'verbosity'];
-const localOnlyFieldKeys = ['localReasoningEffort'];
+const openAiOnlyFieldKeys = ['modelName', 'temperature', 'promptCacheKey', 'serviceTier', 'reasoningEffort', 'verbosity'];
+const gptOssOnlyFieldKeys = ['gptOssReasoningEffort'];
+const qwenOnlyFieldKeys = ['enableThinking'];
 
 
 // Keep track of the most recently created session so follow-up calls are quicker to fill in.
@@ -223,34 +226,20 @@ function isLocalChatCompletionsUrl(urlValue) {
 }
 
 function updateRequestFieldVisibility() {
-  let usesLocalChatCompletionsUrl = false;
+  const modelField = dynamicFields.querySelector('[data-field="model"]');
+  const selectedModel = modelField?.value || 'OpenAi';
 
-  if (requestTypeSelect.value === 'submit-message') {
-    const sessionIdField = dynamicFields.querySelector('[data-field="sessionId"]');
-    const sessionId = sessionIdField?.value.trim() || '';
-
-    usesLocalChatCompletionsUrl = Boolean(
-      lastCreatedSession
-      && sessionId
-      && lastCreatedSession.id === sessionId
-      && isLocalChatCompletionsUrl(lastCreatedSession.chatCompletionsUrl)
-    );
-  }
-
-  openAiHostedOnlyFieldKeys.forEach((fieldKey) => {
+  openAiOnlyFieldKeys.forEach((fieldKey) => {
     const row = dynamicFields.querySelector(`[data-field-row="${fieldKey}"]`);
-
-    if (row) {
-      row.classList.toggle('is-hidden', usesLocalChatCompletionsUrl);
-    }
+    if (row) row.classList.toggle('is-hidden', selectedModel !== 'OpenAi');
   });
-
-  localOnlyFieldKeys.forEach((fieldKey) => {
+  gptOssOnlyFieldKeys.forEach((fieldKey) => {
     const row = dynamicFields.querySelector(`[data-field-row="${fieldKey}"]`);
-
-    if (row) {
-      row.classList.toggle('is-hidden', !usesLocalChatCompletionsUrl);
-    }
+    if (row) row.classList.toggle('is-hidden', selectedModel !== 'GptOss');
+  });
+  qwenOnlyFieldKeys.forEach((fieldKey) => {
+    const row = dynamicFields.querySelector(`[data-field-row="${fieldKey}"]`);
+    if (row) row.classList.toggle('is-hidden', selectedModel !== 'Qwen36');
   });
 }
 
@@ -308,6 +297,7 @@ function renderDynamicFields() {
 
   const chatCompletionsUrlField = dynamicFields.querySelector('[data-field="chatCompletionsUrl"]');
   const sessionIdField = dynamicFields.querySelector('[data-field="sessionId"]');
+  const modelField = dynamicFields.querySelector('[data-field="model"]');
 
   if (chatCompletionsUrlField) {
     chatCompletionsUrlField.addEventListener('input', updateRequestFieldVisibility);
@@ -317,6 +307,10 @@ function renderDynamicFields() {
   if (sessionIdField) {
     sessionIdField.addEventListener('input', updateRequestFieldVisibility);
     sessionIdField.addEventListener('change', updateRequestFieldVisibility);
+  }
+  if (modelField) {
+    modelField.addEventListener('input', updateRequestFieldVisibility);
+    modelField.addEventListener('change', updateRequestFieldVisibility);
   }
 
   populateSessionIdFieldIfAvailable();
@@ -419,24 +413,30 @@ function buildRequest() {
   }
 
   if (requestTypeSelect.value === 'submit-message') {
-    const usesLocalChatCompletionsUrl = Boolean(
-      lastCreatedSession
-      && lastCreatedSession.id === values.sessionId
-      && isLocalChatCompletionsUrl(lastCreatedSession.chatCompletionsUrl)
-    );
     const maxIterations = parseOptionalInteger(values.maxIterations, 'Max Iterations');
     const temperature = parseOptionalNumber(values.temperature, 'Temperature');
+    const model = values.model || 'OpenAi';
 
-    payload = { message: values.message };
+    payload = { message: values.message, model };
     if (maxIterations !== undefined) payload.maxIterations = maxIterations;
     if (values.toolkit) payload.toolkit = values.toolkit;
-    if (temperature !== undefined) payload.temperature = temperature;
-    if (values.model && !usesLocalChatCompletionsUrl) payload.model = values.model;
-    if (values.promptCacheKey && !usesLocalChatCompletionsUrl) payload.promptCacheKey = values.promptCacheKey;
-    if (values.reasoningEffort && !usesLocalChatCompletionsUrl) payload.reasoningEffort = values.reasoningEffort;
-    if (values.localReasoningEffort && usesLocalChatCompletionsUrl) payload.localReasoningEffort = values.localReasoningEffort;
-    if (values.verbosity && !usesLocalChatCompletionsUrl) payload.verbosity = values.verbosity;
-    if (values.serviceTier && !usesLocalChatCompletionsUrl) payload.serviceTier = values.serviceTier;
+
+    if (model === 'OpenAi') {
+      if (values.modelName) payload.modelName = values.modelName;
+      payload.openAi = {};
+      if (temperature !== undefined) payload.openAi.temperature = temperature;
+      if (values.promptCacheKey) payload.openAi.promptCacheKey = values.promptCacheKey;
+      if (values.reasoningEffort) payload.openAi.reasoningEffort = values.reasoningEffort;
+      if (values.verbosity) payload.openAi.verbosity = values.verbosity;
+      if (values.serviceTier) payload.openAi.serviceTier = values.serviceTier;
+    } else if (model === 'GptOss') {
+      payload.gptOss = {};
+      if (values.gptOssReasoningEffort) payload.gptOss.reasoningEffort = values.gptOssReasoningEffort;
+    } else if (model === 'Qwen36') {
+      payload.qwen = {
+        enableThinking: values.enableThinking === 'true'
+      };
+    }
   }
 
   const hasBody = definition.method !== 'GET';
