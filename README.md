@@ -106,14 +106,12 @@ Creates a new session.
 Request body:
 
 - `instructions` - developer instructions for the session.
-- `chatCompletionsUrl` - URL for a Chat Completions-compatible endpoint for this session.
 
 Example request body:
 
 ```json
 {
   "instructions": "You are a helpful assistant.",
-  "chatCompletionsUrl": "https://api.openai.com/v1/chat/completions"
 }
 ```
 
@@ -122,7 +120,6 @@ Example response body:
 ```json
 {
   "id": "8c6d4e4f-3f64-4dbe-a474-f0df2a87c1d2",
-  "chatCompletionsUrl": "https://api.openai.com/v1/chat/completions",
   "instructions": "You are a helpful assistant.",
   "usageTotals": {
     "inputTokens": 0,

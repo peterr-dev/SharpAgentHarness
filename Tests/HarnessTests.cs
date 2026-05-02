@@ -114,7 +114,7 @@ public class HarnessTests
         await using FakeApiClientServer server = await FakeApiClientServer.StartAsync();
         ApiClient apiClient = new ApiClient(server.Client);
 
-        Session session = Sessions.CreateSession("You are a helpful assistant.", server.ChatCompletionsUri);
+        Session session = Sessions.CreateSession("You are a helpful assistant.");
 
         ChatCompletionUserMessageParam userMessage = new ChatCompletionUserMessageParam
         {
@@ -128,7 +128,7 @@ public class HarnessTests
         {
             Session = session,
             ApiClient = apiClient,
-            ChatCompletionsUri = session.ChatCompletionsUri,
+            ChatCompletionsUri = server.ChatCompletionsUri,
             MaxIterations = 5,
             RequestModel = RequestModel.OpenAi,
             CancellationToken = CancellationToken.None
@@ -182,12 +182,12 @@ public class HarnessTests
                                 """
                         });
 
-                Session session = Sessions.CreateSession("You are a helpful assistant.", server.ChatCompletionsUri);
+                Session session = Sessions.CreateSession("You are a helpful assistant.");
                 Turn turn = new Turn
                 {
                         Session = session,
                         ApiClient = new ApiClient(server.Client),
-                        ChatCompletionsUri = session.ChatCompletionsUri,
+                        ChatCompletionsUri = server.ChatCompletionsUri,
                         MaxIterations = 5,
                         CancellationToken = CancellationToken.None,
                         RequestModel = RequestModel.GptOss,
@@ -319,13 +319,13 @@ public class HarnessTests
             });
 
         ApiClient fakeApiClient = new ApiClient(server.Client);
-        Session session = Sessions.CreateSession("You are a concise test assistant.", server.ChatCompletionsUri);
+        Session session = Sessions.CreateSession("You are a concise test assistant.");
 
         Turn CreateTurn() => new Turn
         {
             Session = session,
             ApiClient = fakeApiClient,
-            ChatCompletionsUri = session.ChatCompletionsUri,
+            ChatCompletionsUri = server.ChatCompletionsUri,
             MaxIterations = 5,
             CancellationToken = CancellationToken.None,
             Toolkit = toolkit,
@@ -449,12 +449,12 @@ public class HarnessTests
                 [expectedRequest3Body] = thanksResponseBody
             });
 
-        Session session = Sessions.CreateSession("You are a concise test assistant.", server.ChatCompletionsUri);
+        Session session = Sessions.CreateSession("You are a concise test assistant.");
         Turn CreateTurn() => new Turn
         {
             Session = session,
             ApiClient = new ApiClient(server.Client),
-            ChatCompletionsUri = session.ChatCompletionsUri,
+            ChatCompletionsUri = server.ChatCompletionsUri,
             MaxIterations = 5,
             CancellationToken = CancellationToken.None,
             Toolkit = toolkit,
@@ -504,12 +504,12 @@ public class HarnessTests
                 [expectedRequest2Body] = stopResponseBody
             });
 
-        Session session = Sessions.CreateSession("You are a concise test assistant.", server.ChatCompletionsUri);
+        Session session = Sessions.CreateSession("You are a concise test assistant.");
         Turn turn = new Turn
         {
             Session = session,
             ApiClient = new ApiClient(server.Client),
-            ChatCompletionsUri = session.ChatCompletionsUri,
+            ChatCompletionsUri = server.ChatCompletionsUri,
             MaxIterations = 5,
             CancellationToken = CancellationToken.None,
             Toolkit = toolkit,
