@@ -9,7 +9,7 @@ const requestDefinitions = {
         label: 'Chat Completions URL',
         type: 'text',
         placeholder: 'https://api.openai.com/v1/chat/completions',
-        defaultValue: 'https://api.openai.com/v1/chat/completions'
+        defaultValue: 'http://localhost:8080/chat/completions'
       }
     ]
   },
@@ -20,7 +20,7 @@ const requestDefinitions = {
       { key: 'sessionId', label: 'Session ID', type: 'text', placeholder: 'GUID', required: true },
       { key: 'message', label: 'Message', type: 'textarea', placeholder: 'Hello there', required: true },
       { key: 'model', label: 'Model', type: 'text', placeholder: 'gpt-5-nano', defaultValue: 'gpt-5-nano' },
-      { key: 'temperature', label: 'Temperature', type: 'text', placeholder: '0.2' },
+      { key: 'temperature', label: 'Temperature', type: 'text' },
       { key: 'maxIterations', label: 'Max Iterations', type: 'text', placeholder: '5', defaultValue: '5' },
       { key: 'toolkit', label: 'Toolkit', type: 'text', placeholder: 'Example', defaultValue: 'Example' },
       { key: 'promptCacheKey', label: 'Prompt Cache Key', type: 'text', placeholder: 'SharpAgentHarness', defaultValue: 'SharpAgentHarness' },
@@ -33,10 +33,17 @@ const requestDefinitions = {
       },
       {
         key: 'reasoningEffort',
-        label: 'Reasoning Effort',
+        label: 'Hosted Reasoning Effort',
         type: 'select',
         options: ['None', 'Minimal', 'Low', 'Medium', 'High', 'XHigh'],
         defaultValue: 'Minimal'
+      },
+      {
+        key: 'localReasoningEffort',
+        label: 'Local Reasoning Effort',
+        type: 'select',
+        options: ['Low', 'Medium', 'High'],
+        defaultValue: 'Medium'
       },
       {
         key: 'verbosity',
@@ -70,6 +77,7 @@ const responseBody = document.getElementById('responseBody');
 const copyBtn = document.getElementById('copyBtn');
 
 const openAiHostedOnlyFieldKeys = ['model', 'promptCacheKey', 'serviceTier', 'reasoningEffort', 'verbosity'];
+const localOnlyFieldKeys = ['localReasoningEffort'];
 
 
 // Keep track of the most recently created session so follow-up calls are quicker to fill in.
@@ -234,6 +242,14 @@ function updateRequestFieldVisibility() {
 
     if (row) {
       row.classList.toggle('is-hidden', usesLocalChatCompletionsUrl);
+    }
+  });
+
+  localOnlyFieldKeys.forEach((fieldKey) => {
+    const row = dynamicFields.querySelector(`[data-field-row="${fieldKey}"]`);
+
+    if (row) {
+      row.classList.toggle('is-hidden', !usesLocalChatCompletionsUrl);
     }
   });
 }
@@ -418,6 +434,7 @@ function buildRequest() {
     if (values.model && !usesLocalChatCompletionsUrl) payload.model = values.model;
     if (values.promptCacheKey && !usesLocalChatCompletionsUrl) payload.promptCacheKey = values.promptCacheKey;
     if (values.reasoningEffort && !usesLocalChatCompletionsUrl) payload.reasoningEffort = values.reasoningEffort;
+    if (values.localReasoningEffort && usesLocalChatCompletionsUrl) payload.localReasoningEffort = values.localReasoningEffort;
     if (values.verbosity && !usesLocalChatCompletionsUrl) payload.verbosity = values.verbosity;
     if (values.serviceTier && !usesLocalChatCompletionsUrl) payload.serviceTier = values.serviceTier;
   }

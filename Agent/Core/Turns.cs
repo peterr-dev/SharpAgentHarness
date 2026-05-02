@@ -23,6 +23,8 @@ namespace Core
 
         public ReasoningEffort? ReasoningEffort { get; init; }
 
+        public LocalReasoningEffort? LocalReasoningEffort { get; init; }
+
         public Verbosity? Verbosity { get; init; }
 
         public ServiceTier? ServiceTier { get; init; }
@@ -57,8 +59,11 @@ namespace Core
                     if (PromptCacheKey != null)
                         request.PromptCacheKey = PromptCacheKey;
 
-                    if (ReasoningEffort != null)
+                    if (ReasoningEffort != null && !UsesLocalChatCompletionsRequestShape(ChatCompletionsUri))
                         request.ReasoningEffort = ReasoningEffort;
+
+                    if (LocalReasoningEffort != null && UsesLocalChatCompletionsRequestShape(ChatCompletionsUri))
+                        request.LocalReasoningEffort = LocalReasoningEffort;
 
                     if (Verbosity != null)
                         request.Verbosity = Verbosity;
@@ -220,6 +225,15 @@ namespace Core
                 },
                 _ => throw new InvalidOperationException($"Unsupported tool call type: {toolCall.GetType().Name}")
             };
+        }
+
+        private static bool UsesLocalChatCompletionsRequestShape(Uri chatCompletionsUri)
+        {
+            return chatCompletionsUri.IsLoopback
+                || string.Equals(chatCompletionsUri.Host, "localhost", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(chatCompletionsUri.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(chatCompletionsUri.Host, "::1", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(chatCompletionsUri.Host, "[::1]", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

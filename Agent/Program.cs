@@ -137,6 +137,7 @@ app.MapPost("/api/sessions/{sessionId}/messages", async (Guid sessionId, SendMes
             Model = body.model,
             PromptCacheKey = body.promptCacheKey,
             ReasoningEffort = body.reasoningEffort,
+            LocalReasoningEffort = body.localReasoningEffort,
             Verbosity = body.verbosity,
             ServiceTier = body.serviceTier,
             CancellationToken = CancellationToken.None
@@ -324,6 +325,7 @@ record SendMessageRequest(
     string? model,
     string? promptCacheKey,
     ReasoningEffort? reasoningEffort,
+    LocalReasoningEffort? localReasoningEffort,
     Verbosity? verbosity,
     ServiceTier? serviceTier);
 

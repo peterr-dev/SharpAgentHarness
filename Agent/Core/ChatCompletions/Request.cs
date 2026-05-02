@@ -12,6 +12,13 @@ namespace Core.ChatCompletions
         XHigh
     }
 
+    public enum LocalReasoningEffort
+    {
+        Low,
+        Medium,
+        High
+    }
+
     public enum Verbosity
     {
         Low,
@@ -40,6 +47,8 @@ namespace Core.ChatCompletions
 
         public ReasoningEffort? ReasoningEffort { get; set; }
 
+        public LocalReasoningEffort? LocalReasoningEffort { get; set; }
+
         public Verbosity? Verbosity { get; set; }
 
         public ServiceTier? ServiceTier { get; set; }
@@ -63,13 +72,13 @@ namespace Core.ChatCompletions
                 body["prompt_cache_key"] = PromptCacheKey;
 
             if (ReasoningEffort != null)
-                body["reasoning_effort"] = ReasoningEffort.Value.ToString().ToLower();
+                body["reasoning_effort"] = ReasoningEffort.Value.ToString().ToLowerInvariant();
 
             if (Verbosity != null)
-                body["verbosity"] = Verbosity.Value.ToString().ToLower();   
+                body["verbosity"] = Verbosity.Value.ToString().ToLowerInvariant();   
             
             if (ServiceTier != null)
-                body["service_tier"] = ServiceTier.Value.ToString().ToLower();
+                body["service_tier"] = ServiceTier.Value.ToString().ToLowerInvariant();
 
             Tools.ForEach(tool =>
             {
@@ -122,6 +131,14 @@ namespace Core.ChatCompletions
                     throw new InvalidOperationException($"Unsupported tool type: {tool.GetType().Name}");
                 }
             });
+
+            if (LocalReasoningEffort != null)
+            {
+                body["chat_template_kwargs"] = new JsonObject
+                {
+                    ["reasoning_effort"] = LocalReasoningEffort.Value.ToString().ToLowerInvariant()
+                };
+            }
 
             return body.ToJsonString();
         }

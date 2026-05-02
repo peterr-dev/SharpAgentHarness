@@ -11,6 +11,105 @@ namespace Tests;
 public class HarnessTests
 {
     [Fact]
+    public void RequestSerialisesHostedReasoningEffortAtTopLevel()
+    {
+        Request request = new Request
+        {
+            Messages =
+            [
+                new ChatCompletionDeveloperMessageParam
+                {
+                    Content = "You are a helpful assistant."
+                },
+                new ChatCompletionUserMessageParam
+                {
+                    Content = [new ChatCompletionContentPartText { Text = "Hello!" }]
+                }
+            ],
+            ReasoningEffort = ReasoningEffort.XHigh
+        };
+
+        Assert.Equal(
+            """{"messages":[{"role":"developer","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"Hello!"}]}],"reasoning_effort":"xhigh"}""",
+            request.ToJson());
+    }
+
+    [Fact]
+    public void RequestSerialisesLocalReasoningEffortUnderChatTemplateKwargs()
+    {
+        Request request = new Request
+        {
+            Messages =
+            [
+                new ChatCompletionDeveloperMessageParam
+                {
+                    Content = "You are a helpful assistant."
+                },
+                new ChatCompletionUserMessageParam
+                {
+                    Content = [new ChatCompletionContentPartText { Text = "Hello!" }]
+                }
+            ],
+            LocalReasoningEffort = LocalReasoningEffort.High
+        };
+
+        Assert.Equal(
+            """{"messages":[{"role":"developer","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"Hello!"}]}],"chat_template_kwargs":{"reasoning_effort":"high"}}""",
+            request.ToJson());
+    }
+
+    [Fact]
+    public void RequestSerialisesChatTemplateKwargsAsFinalProperty()
+    {
+        StaticGetCurrentTimeTool tool = new StaticGetCurrentTimeTool("2026-04-20T12:34:56.0000000+00:00");
+
+        Request request = new Request
+        {
+            Messages =
+            [
+                new ChatCompletionDeveloperMessageParam
+                {
+                    Content = "You are a helpful assistant."
+                },
+                new ChatCompletionUserMessageParam
+                {
+                    Content = [new ChatCompletionContentPartText { Text = "Hello!" }]
+                }
+            ],
+            Temperature = 0.7,
+            Tools = [tool],
+            LocalReasoningEffort = LocalReasoningEffort.High
+        };
+
+        Assert.Equal(
+            """{"messages":[{"role":"developer","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"Hello!"}]}],"temperature":0.7,"tools":[{"type":"function","function":{"name":"get_current_time","description":"Get the current time in ISO 8601 format for a specified timezone.","strict":true,"parameters":{"type":"object","properties":{"timezone":{"type":"string","description":"The IANA timezone identifier (e.g., \u0027America/New_York\u0027). If not provided, defaults to UTC."}},"required":["timezone"],"additionalProperties":false}}}],"chat_template_kwargs":{"reasoning_effort":"high"}}""",
+            request.ToJson());
+    }
+
+    [Fact]
+    public void RequestOmitsChatTemplateKwargsWhenLocalReasoningEffortIsUnset()
+    {
+        Request request = new Request
+        {
+            Messages =
+            [
+                new ChatCompletionDeveloperMessageParam
+                {
+                    Content = "You are a helpful assistant."
+                },
+                new ChatCompletionUserMessageParam
+                {
+                    Content = [new ChatCompletionContentPartText { Text = "Hello!" }]
+                }
+            ]
+        };
+
+        Assert.Equal(
+            """{"messages":[{"role":"developer","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"Hello!"}]}]}""",
+            request.ToJson());
+    }
+
+    [Fact]
     public async Task SingleTurnSession()
     {
         await using FakeApiClientServer server = await FakeApiClientServer.StartAsync();
@@ -48,6 +147,65 @@ public class HarnessTests
         Assert.Equal(7, session.TotalOutputTokens);
         Assert.Equal(3, session.TotalReasoningOutputTokens);
     }
+
+        [Fact]
+        public async Task TurnUsesLocalReasoningEffortForLocalChatCompletionsRequests()
+        {
+                const string expectedRequestBody = """{"messages":[{"role":"developer","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"Hello!"}]}],"chat_template_kwargs":{"reasoning_effort":"high"}}""";
+
+                await using FakeApiClientServer server = await FakeApiClientServer.StartAsync(
+                        new Dictionary<string, string>
+                        {
+                                [expectedRequestBody] = """
+                                {
+                                    "id": "chatcmpl_test_local_reasoning",
+                                    "object": "chat.completion",
+                                    "created": 1710000000,
+                                    "model": "local-model",
+                                    "choices": [
+                                        {
+                                            "index": 0,
+                                            "finish_reason": "stop",
+                                            "message": {
+                                                "role": "assistant",
+                                                "content": "Hello from fake local server.",
+                                                "refusal": ""
+                                            }
+                                        }
+                                    ],
+                                    "usage": {
+                                        "prompt_tokens": 12,
+                                        "completion_tokens": 7,
+                                        "total_tokens": 19
+                                    }
+                                }
+                                """
+                        });
+
+                Session session = Sessions.CreateSession("You are a helpful assistant.", server.ChatCompletionsUri);
+                Turn turn = new Turn
+                {
+                        Session = session,
+                        ApiClient = new ApiClient(server.Client),
+                        ChatCompletionsUri = session.ChatCompletionsUri,
+                        MaxIterations = 5,
+                        CancellationToken = CancellationToken.None,
+                        ReasoningEffort = ReasoningEffort.Minimal,
+                        LocalReasoningEffort = LocalReasoningEffort.High
+                };
+
+                ChatCompletionMessage response = await turn.RunTurnAsync(new ChatCompletionUserMessageParam
+                {
+                        Content = [new ChatCompletionContentPartText { Text = "Hello!" }]
+                });
+
+                IReadOnlyList<RawRequestReady> rawRequests = Events.GetEventsForSession<RawRequestReady>(session.Id);
+
+                Assert.Equal("Hello from fake local server.", response.Content);
+                Assert.Single(rawRequests);
+                Assert.Equal(expectedRequestBody, rawRequests[0].RawRequest);
+                Assert.DoesNotContain("\"reasoning_effort\":\"minimal\"", rawRequests[0].RawRequest);
+        }
 
     [Fact]
     public async Task MultiTurnSessionWithToolUsage()
