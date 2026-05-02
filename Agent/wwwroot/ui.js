@@ -18,7 +18,7 @@ const requestDefinitions = {
     path: '/sessions/{sessionId}/messages',
     fields: [
       { key: 'sessionId', label: 'Session ID', type: 'text', placeholder: 'GUID', required: true },
-      { key: 'model', label: 'Model Family', type: 'select', options: ['OpenAi', 'GptOss', 'Qwen36'], defaultValue: 'OpenAi' },
+      { key: 'model', label: 'Request Profile', type: 'select', options: ['OpenAi', 'GptOss', 'Qwen36'], defaultValue: 'OpenAi' },
       { key: 'message', label: 'Message', type: 'textarea', placeholder: 'Hello there', required: true },
       { key: 'maxIterations', label: 'Max Iterations', type: 'text', placeholder: '5', defaultValue: '5' },
       { key: 'toolkit', label: 'Toolkit', type: 'text', placeholder: 'Example', defaultValue: 'Example' },
