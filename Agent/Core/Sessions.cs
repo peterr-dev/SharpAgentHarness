@@ -9,15 +9,12 @@ namespace Core
 
         public List<ChatCompletionMessageParam> Messages { get; } = new();
 
-        public Uri ChatCompletionsUri { get; set; }
-
-        public Session(string instructions, Uri chatCompletionsUri)
+        public Session(string instructions)
         {
             Messages.Add(new ChatCompletionDeveloperMessageParam
             {
                 Content = instructions
             });
-            ChatCompletionsUri = chatCompletionsUri;
         }
 
         public int TotalInputTokens { get; private set; }
@@ -41,9 +38,9 @@ namespace Core
     {
         private static readonly ConcurrentDictionary<Guid, Session> _sessions = new();
 
-        public static Session CreateSession(string instructions, Uri chatCompletionsUri)
+        public static Session CreateSession(string instructions)
         {
-            Session session = new Session(instructions, chatCompletionsUri);
+            Session session = new Session(instructions);
             _sessions[session.Id] = session;
             return session;
         }

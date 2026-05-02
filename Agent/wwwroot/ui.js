@@ -3,14 +3,7 @@ const requestDefinitions = {
     method: 'POST',
     path: '/sessions',
     fields: [
-      { key: 'instructions', label: 'Instructions', type: 'textarea', placeholder: 'You are a helpful assistant.', defaultValue: 'You are a helpful assistant.' },
-      {
-        key: 'chatCompletionsUrl',
-        label: 'Chat Completions URL',
-        type: 'text',
-        placeholder: 'https://api.openai.com/v1/chat/completions',
-        defaultValue: 'http://localhost:8080/chat/completions'
-      }
+      { key: 'instructions', label: 'Instructions', type: 'textarea', placeholder: 'You are a helpful assistant.', defaultValue: 'You are a helpful assistant.' }
     ]
   },
   'submit-message': {
@@ -19,6 +12,7 @@ const requestDefinitions = {
     fields: [
       { key: 'sessionId', label: 'Session ID', type: 'text', placeholder: 'GUID', required: true },
       { key: 'model', label: 'Model Family', type: 'select', options: ['OpenAi', 'GptOss', 'Qwen36'], defaultValue: 'OpenAi' },
+      { key: 'chatCompletionsUrl', label: 'Chat Completions URL', type: 'text', defaultValue: 'https://api.openai.com/v1/chat/completions', readOnly: true, note: 'Derived from the selected model profile.' },
       { key: 'message', label: 'Message', type: 'textarea', placeholder: 'Hello there', required: true },
       { key: 'maxIterations', label: 'Max Iterations', type: 'text', placeholder: '5', defaultValue: '5' },
       { key: 'toolkit', label: 'Toolkit', type: 'text', placeholder: 'Example', defaultValue: 'Example' },
@@ -78,6 +72,11 @@ const responseBody = document.getElementById('responseBody');
 const copyBtn = document.getElementById('copyBtn');
 
 const openAiOnlyFieldKeys = ['modelName', 'promptCacheKey', 'serviceTier', 'reasoningEffort', 'verbosity'];
+const modelChatCompletionsUrls = {
+  OpenAi: 'https://api.openai.com/v1/chat/completions',
+  GptOss: 'http://localhost:8080/chat/completions',
+  Qwen36: 'http://localhost:8080/chat/completions'
+};
 const gptOssOnlyFieldKeys = ['gptOssReasoningEffort'];
 const qwenOnlyFieldKeys = ['enableThinking'];
 
@@ -100,15 +99,12 @@ function loadLastSession() {
     }
 
     const sessionId = typeof parsed.id === 'string' ? parsed.id : '';
-    const chatCompletionsUrl = typeof parsed.chatCompletionsUrl === 'string' ? parsed.chatCompletionsUrl : '';
-
     if (!sessionId) {
       return null;
     }
 
     return {
-      id: sessionId,
-      chatCompletionsUrl
+      id: sessionId
     };
   } catch {
     return null;
@@ -131,8 +127,7 @@ function findSessionFromResponse(responseText) {
 
     if (parsed && typeof parsed === 'object' && typeof parsed.id === 'string') {
       return {
-        id: parsed.id,
-        chatCompletionsUrl: typeof parsed.chatCompletionsUrl === 'string' ? parsed.chatCompletionsUrl : ''
+        id: parsed.id
       };
     }
   } catch {
@@ -204,26 +199,6 @@ function getCachedInputTokens(responseText) {
   return null;
 }
 
-function isLocalChatCompletionsUrl(urlValue) {
-  if (!urlValue) {
-    return false;
-  }
-
-  const trimmedValue = urlValue.trim();
-
-  if (/^(localhost|127\.0\.0\.1|\[::1\]|::1)(:\d+)?(\/.*)?$/i.test(trimmedValue)) {
-    return true;
-  }
-
-  try {
-    const parsedUrl = new URL(trimmedValue);
-    const hostname = parsedUrl.hostname.toLowerCase();
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]';
-  } catch {
-    return false;
-  }
-}
-
 function updateRequestFieldVisibility() {
   const modelField = dynamicFields.querySelector('[data-field="model"]');
   const selectedModel = modelField?.value || 'OpenAi';
@@ -240,6 +215,11 @@ function updateRequestFieldVisibility() {
     const row = dynamicFields.querySelector(`[data-field-row="${fieldKey}"]`);
     if (row) row.classList.toggle('is-hidden', selectedModel !== 'Qwen36');
   });
+
+  const modelUrlField = dynamicFields.querySelector('[data-field="chatCompletionsUrl"]');
+  if (modelUrlField) {
+    modelUrlField.value = modelChatCompletionsUrls[selectedModel] || '';
+  }
 }
 
 function renderDynamicFields() {
@@ -274,6 +254,9 @@ function renderDynamicFields() {
     control.id = field.key;
     control.dataset.field = field.key;
     control.placeholder = field.placeholder || '';
+    if (field.readOnly) {
+      control.readOnly = true;
+    }
 
     if (field.defaultValue !== undefined) {
       control.value = field.defaultValue;
@@ -294,14 +277,8 @@ function renderDynamicFields() {
     dynamicFields.appendChild(row);
   });
 
-  const chatCompletionsUrlField = dynamicFields.querySelector('[data-field="chatCompletionsUrl"]');
   const sessionIdField = dynamicFields.querySelector('[data-field="sessionId"]');
   const modelField = dynamicFields.querySelector('[data-field="model"]');
-
-  if (chatCompletionsUrlField) {
-    chatCompletionsUrlField.addEventListener('input', updateRequestFieldVisibility);
-    chatCompletionsUrlField.addEventListener('change', updateRequestFieldVisibility);
-  }
 
   if (sessionIdField) {
     sessionIdField.addEventListener('input', updateRequestFieldVisibility);
@@ -408,7 +385,6 @@ function buildRequest() {
   if (requestTypeSelect.value === 'create-session') {
     payload = {};
     if (values.instructions) payload.instructions = values.instructions;
-    if (values.chatCompletionsUrl) payload.chatCompletionsUrl = values.chatCompletionsUrl;
   }
 
   if (requestTypeSelect.value === 'submit-message') {
