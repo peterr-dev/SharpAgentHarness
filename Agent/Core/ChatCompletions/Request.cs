@@ -1,4 +1,5 @@
-﻿using System.Text.Json.Nodes;
+﻿using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Core.ChatCompletions
 {
@@ -37,6 +38,7 @@ namespace Core.ChatCompletions
 
     public abstract class Request
     {
+        public StructuredOutputOptions? StructuredOutput { get; set; }
         public List<ChatCompletionMessageParam> Messages { get; set; } = new();
 
         public List<ChatCompletionTool> Tools { get; set; } = new();
@@ -101,11 +103,38 @@ namespace Core.ChatCompletions
             });
 
             AddModelSpecificFields(body);
+            AddStructuredOutputFields(body);
 
             return body.ToJsonString();
         }
 
         protected abstract void AddModelSpecificFields(JsonObject body);
+
+        private void AddStructuredOutputFields(JsonObject body)
+        {
+            if (!string.Equals(StructuredOutput?.OutputMode, "json_schema", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            string schemaName = string.IsNullOrWhiteSpace(StructuredOutput.JsonSchemaName) ? "structured_response" : StructuredOutput.JsonSchemaName;
+            JsonObject jsonSchemaBody = new JsonObject
+            {
+                ["name"] = schemaName,
+                ["schema"] = JsonNode.Parse(StructuredOutput.JsonSchema!.Value.GetRawText())
+            };
+
+            if (StructuredOutput.JsonStrict != null)
+            {
+                jsonSchemaBody["strict"] = StructuredOutput.JsonStrict.Value;
+            }
+
+            body["response_format"] = new JsonObject
+            {
+                ["type"] = "json_schema",
+                ["json_schema"] = jsonSchemaBody
+            };
+        }
     }
 
     public sealed class OpenAiRequest : Request
@@ -123,6 +152,7 @@ namespace Core.ChatCompletions
             if (ReasoningEffort != null) body["reasoning_effort"] = ReasoningEffort.Value.ToString().ToLowerInvariant();
             if (Verbosity != null) body["verbosity"] = Verbosity.Value.ToString().ToLowerInvariant();
             if (ServiceTier != null) body["service_tier"] = ServiceTier.Value.ToString().ToLowerInvariant();
+
         }
     }
 

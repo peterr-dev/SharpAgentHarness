@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Core.ChatCompletions
 {
     public enum RequestModel
@@ -16,6 +18,14 @@ namespace Core.ChatCompletions
         public string? PromptCacheKey { get; init; }
     }
 
+    public sealed class StructuredOutputOptions
+    {
+        public string? OutputMode { get; init; }
+        public string? JsonSchemaName { get; init; }
+        public JsonElement? JsonSchema { get; init; }
+        public bool? JsonStrict { get; init; }
+    }
+
     public sealed class GptOssRequestOptions
     {
         public GptOssReasoningEffort? ReasoningEffort { get; init; }
@@ -32,6 +42,7 @@ namespace Core.ChatCompletions
             RequestModel requestModel,
             List<ChatCompletionMessageParam> messages,
             List<ChatCompletionTool>? tools,
+            StructuredOutputOptions? structuredOutput,
             OpenAiRequestOptions? openAi,
             GptOssRequestOptions? gptOss,
             QwenRequestOptions? qwen)
@@ -59,6 +70,7 @@ namespace Core.ChatCompletions
 
             request.Messages = messages;
             request.Tools = tools ?? new List<ChatCompletionTool>();
+            request.StructuredOutput = structuredOutput;
             return request;
         }
     }

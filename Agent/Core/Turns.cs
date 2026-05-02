@@ -18,6 +18,7 @@ namespace Core
         public Toolkit? Toolkit { get; init; }
 
         public required RequestModel RequestModel { get; init; }
+        public StructuredOutputOptions? StructuredOutput { get; init; }
         public OpenAiRequestOptions? OpenAi { get; init; }
         public GptOssRequestOptions? GptOss { get; init; }
         public QwenRequestOptions? Qwen { get; init; }
@@ -37,6 +38,7 @@ namespace Core
                         RequestModel,
                         BuildRequestMessages(Session.Messages, turnStartIndex),
                         Toolkit?.Tools,
+                        StructuredOutput,
                         OpenAi,
                         GptOss,
                         Qwen);
