@@ -16,7 +16,7 @@ const requestDefinitions = {
       { key: 'message', label: 'Message', type: 'textarea', placeholder: 'Hello there', required: true },
       { key: 'maxIterations', label: 'Max Iterations', type: 'text', placeholder: '5', defaultValue: '5' },
       { key: 'toolkit', label: 'Toolkit', type: 'text', placeholder: 'Example', defaultValue: 'Example' },
-      { key: 'modelName', label: 'Model Name', type: 'text', defaultValue: 'gpt-5.1-nano' },
+      { key: 'modelName', label: 'Model Name', type: 'text', defaultValue: 'gpt-5-nano' },
       { key: 'promptCacheKey', label: 'Prompt Cache Key', type: 'text', placeholder: 'SharpAgentHarness', defaultValue: 'SharpAgentHarness' },
       {
         key: 'serviceTier',
