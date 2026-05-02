@@ -23,7 +23,6 @@ const requestDefinitions = {
       { key: 'maxIterations', label: 'Max Iterations', type: 'text', placeholder: '5', defaultValue: '5' },
       { key: 'toolkit', label: 'Toolkit', type: 'text', placeholder: 'Example', defaultValue: 'Example' },
       { key: 'modelName', label: 'Model Name', type: 'text', defaultValue: 'gpt-5.1-nano' },
-      { key: 'temperature', label: 'Temperature', type: 'text' },
       { key: 'promptCacheKey', label: 'Prompt Cache Key', type: 'text', placeholder: 'SharpAgentHarness', defaultValue: 'SharpAgentHarness' },
       {
         key: 'serviceTier',
@@ -78,7 +77,7 @@ const cachePill = document.getElementById('cachePill');
 const responseBody = document.getElementById('responseBody');
 const copyBtn = document.getElementById('copyBtn');
 
-const openAiOnlyFieldKeys = ['modelName', 'temperature', 'promptCacheKey', 'serviceTier', 'reasoningEffort', 'verbosity'];
+const openAiOnlyFieldKeys = ['modelName', 'promptCacheKey', 'serviceTier', 'reasoningEffort', 'verbosity'];
 const gptOssOnlyFieldKeys = ['gptOssReasoningEffort'];
 const qwenOnlyFieldKeys = ['enableThinking'];
 
@@ -414,7 +413,6 @@ function buildRequest() {
 
   if (requestTypeSelect.value === 'submit-message') {
     const maxIterations = parseOptionalInteger(values.maxIterations, 'Max Iterations');
-    const temperature = parseOptionalNumber(values.temperature, 'Temperature');
     const model = values.model || 'OpenAi';
 
     payload = { message: values.message, model };
@@ -424,7 +422,6 @@ function buildRequest() {
     if (model === 'OpenAi') {
       if (values.modelName) payload.modelName = values.modelName;
       payload.openAi = {};
-      if (temperature !== undefined) payload.openAi.temperature = temperature;
       if (values.promptCacheKey) payload.openAi.promptCacheKey = values.promptCacheKey;
       if (values.reasoningEffort) payload.openAi.reasoningEffort = values.reasoningEffort;
       if (values.verbosity) payload.openAi.verbosity = values.verbosity;

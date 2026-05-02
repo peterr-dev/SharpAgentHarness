@@ -220,7 +220,6 @@ Request body:
 - `message` - required user message text.
 - `maxIterations` - required maximum number of request -> response -> tool-call loops for the turn.
 - `toolkit` - optional toolkit name for this turn.
-- `temperature` - optional temperature passed through to the chat completions request.
 - `model` - optional model name passed through to the chat completions API.
 - `promptCacheKey` - optional prompt cache key passed through to the chat completions API.
 - `reasoningEffort` - optional reasoning setting. Allowed values: `None`, `Minimal`, `Low`, `Medium`, `High`, `XHigh`.

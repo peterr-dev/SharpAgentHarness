@@ -9,7 +9,6 @@ namespace Core.ChatCompletions
 
     public sealed class OpenAiRequestOptions
     {
-        public double? Temperature { get; init; }
         public string? ModelName { get; init; }
         public OpenAiReasoningEffort? ReasoningEffort { get; init; }
         public Verbosity? Verbosity { get; init; }
@@ -41,7 +40,6 @@ namespace Core.ChatCompletions
             {
                 RequestModel.OpenAi => new OpenAiRequest
                 {
-                    Temperature = openAi?.Temperature,
                     Model = openAi?.ModelName,
                     ReasoningEffort = openAi?.ReasoningEffort,
                     Verbosity = openAi?.Verbosity,

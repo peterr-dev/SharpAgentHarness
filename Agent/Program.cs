@@ -136,7 +136,6 @@ app.MapPost("/api/sessions/{sessionId}/messages", async (Guid sessionId, SendMes
             RequestModel = body.model,
             OpenAi = body.openAi is null ? null : new OpenAiRequestOptions
             {
-                Temperature = body.openAi.temperature,
                 ModelName = body.modelName,
                 PromptCacheKey = body.openAi.promptCacheKey,
                 ReasoningEffort = body.openAi.reasoningEffort,
@@ -339,7 +338,6 @@ record SendMessageRequest(
     QwenOptions? qwen);
 
 record OpenAiOptions(
-    double? temperature,
     string? promptCacheKey,
     OpenAiReasoningEffort? reasoningEffort,
     Verbosity? verbosity,

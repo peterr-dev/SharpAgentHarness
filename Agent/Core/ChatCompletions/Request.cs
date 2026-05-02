@@ -110,7 +110,6 @@ namespace Core.ChatCompletions
 
     public sealed class OpenAiRequest : Request
     {
-        public double? Temperature { get; set; }
         public string? Model { get; set; }
         public OpenAiReasoningEffort? ReasoningEffort { get; set; }
         public Verbosity? Verbosity { get; set; }
@@ -119,7 +118,6 @@ namespace Core.ChatCompletions
 
         protected override void AddModelSpecificFields(JsonObject body)
         {
-            if (Temperature != null) body["temperature"] = Temperature;
             if (!string.IsNullOrEmpty(Model)) body["model"] = Model;
             if (!string.IsNullOrEmpty(PromptCacheKey)) body["prompt_cache_key"] = PromptCacheKey;
             if (ReasoningEffort != null) body["reasoning_effort"] = ReasoningEffort.Value.ToString().ToLowerInvariant();
