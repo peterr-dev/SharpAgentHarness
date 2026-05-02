@@ -19,11 +19,11 @@ const requestDefinitions = {
     fields: [
       { key: 'sessionId', label: 'Session ID', type: 'text', placeholder: 'GUID', required: true },
       { key: 'message', label: 'Message', type: 'textarea', placeholder: 'Hello there', required: true },
+      { key: 'maxIterations', label: 'Max Iterations', type: 'text', placeholder: '5', defaultValue: '5' },
+      { key: 'toolkit', label: 'Toolkit', type: 'text', placeholder: 'Example', defaultValue: 'Example' },
       { key: 'model', label: 'Model Family', type: 'select', options: ['OpenAi', 'GptOss', 'Qwen36'], defaultValue: 'OpenAi' },
       { key: 'modelName', label: 'Model Name', type: 'text', placeholder: 'gpt-5.1', defaultValue: 'gpt-5.1' },
       { key: 'temperature', label: 'Temperature', type: 'text' },
-      { key: 'maxIterations', label: 'Max Iterations', type: 'text', placeholder: '5', defaultValue: '5' },
-      { key: 'toolkit', label: 'Toolkit', type: 'text', placeholder: 'Example', defaultValue: 'Example' },
       { key: 'promptCacheKey', label: 'Prompt Cache Key', type: 'text', placeholder: 'SharpAgentHarness', defaultValue: 'SharpAgentHarness' },
       {
         key: 'serviceTier',
@@ -34,19 +34,19 @@ const requestDefinitions = {
       },
       {
         key: 'reasoningEffort',
-        label: 'Hosted Reasoning Effort',
+        label: 'Reasoning Effort',
         type: 'select',
         options: ['None', 'Minimal', 'Low', 'Medium', 'High', 'XHigh'],
         defaultValue: 'Minimal'
       },
       {
         key: 'gptOssReasoningEffort',
-        label: 'GPT-OSS Reasoning Effort',
+        label: 'Reasoning Effort',
         type: 'select',
         options: ['Low', 'Medium', 'High'],
         defaultValue: 'Medium'
       },
-      { key: 'enableThinking', label: 'Qwen Enable Thinking', type: 'select', options: ['true', 'false'], defaultValue: 'true' },
+      { key: 'enableThinking', label: 'Enable Thinking', type: 'select', options: ['true', 'false'], defaultValue: 'true' },
       {
         key: 'verbosity',
         label: 'Text Verbosity',
