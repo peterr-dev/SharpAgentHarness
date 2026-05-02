@@ -106,6 +106,7 @@ app.MapPost("/api/sessions/{sessionId}/messages", async (Guid sessionId, SendMes
     try
     {
         ArgumentException.ThrowIfNullOrEmpty(body.message, nameof(body.message));
+        ValidateStructuredOutputRequest(body);
 
         Session session = Sessions.GetSession(sessionId);
         int maxIterations = body.maxIterations;
@@ -132,6 +133,13 @@ app.MapPost("/api/sessions/{sessionId}/messages", async (Guid sessionId, SendMes
             ChatCompletionsUri = GetChatCompletionsUri(body.model),
             MaxIterations = maxIterations,
             RequestModel = body.model,
+            StructuredOutput = new StructuredOutputOptions
+            {
+                OutputMode = body.outputMode,
+                JsonSchemaName = body.jsonSchemaName,
+                JsonSchema = body.jsonSchema,
+                JsonStrict = body.jsonStrict
+            },
             OpenAi = body.openAi is null ? null : new OpenAiRequestOptions
             {
                 ModelName = body.modelName,
@@ -157,6 +165,10 @@ app.MapPost("/api/sessions/{sessionId}/messages", async (Guid sessionId, SendMes
     catch (KeyNotFoundException ex)
     {
         return Results.NotFound(new { error = ex.Message });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
     }
     catch (Exception ex)
     {
@@ -335,6 +347,34 @@ static object MapToolCallForApi(ChatCompletionMessageToolCall toolCall)
     };
 }
 
+static void ValidateStructuredOutputRequest(SendMessageRequest body)
+{
+    // Keep backward compatibility: if structured output fields are omitted, do not change behaviour.
+    if (string.IsNullOrWhiteSpace(body.outputMode))
+    {
+        return;
+    }
+
+    if (!string.Equals(body.outputMode, "json_schema", StringComparison.OrdinalIgnoreCase))
+    {
+        return;
+    }
+
+    if (body.jsonSchema is null)
+    {
+        throw new ArgumentException("Structured output requires jsonSchema when outputMode is 'json_schema'.");
+    }
+
+    try
+    {
+        JsonDocument.Parse(body.jsonSchema.Value.GetRawText());
+    }
+    catch (JsonException ex)
+    {
+        throw new ArgumentException($"jsonSchema must be valid JSON: {ex.Message}", ex);
+    }
+}
+
 record CreateSessionRequest(string instructions);
 
 record SendMessageRequest(
@@ -343,6 +383,10 @@ record SendMessageRequest(
     string? toolkit,
     RequestModel model,
     string? modelName,
+    string? outputMode,
+    string? jsonSchemaName,
+    JsonElement? jsonSchema,
+    bool? jsonStrict,
     OpenAiOptions? openAi,
     GptOssOptions? gptOss,
     QwenOptions? qwen);
