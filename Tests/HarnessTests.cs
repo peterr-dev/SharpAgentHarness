@@ -143,6 +143,122 @@ public class HarnessTests
     }
 
     [Fact]
+    public async Task TurnIncludesStructuredOutputFieldsWhenEnabled()
+    {
+        const string expectedRequestBody = """{"messages":[{"role":"developer","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"Hello!"}]}],"response_format":{"type":"json_schema","json_schema":{"name":"math_answer","schema":{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false},"strict":true}}}""";
+
+        await using FakeApiClientServer server = await FakeApiClientServer.StartAsync(
+            new Dictionary<string, string>
+            {
+                [expectedRequestBody] = """
+                {
+                    "id": "chatcmpl_structured_output_enabled",
+                    "object": "chat.completion",
+                    "created": 1710000000,
+                    "model": "gpt-5-nano",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "finish_reason": "stop",
+                            "message": {
+                                "role": "assistant",
+                                "content": "{\"answer\":\"42\"}",
+                                "refusal": ""
+                            }
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 12,
+                        "completion_tokens": 7,
+                        "total_tokens": 19
+                    }
+                }
+                """
+            });
+
+        Session session = Sessions.CreateSession("You are a helpful assistant.");
+        Turn turn = new Turn
+        {
+            Session = session,
+            ApiClient = new ApiClient(server.Client),
+            ChatCompletionsUri = server.ChatCompletionsUri,
+            MaxIterations = 5,
+            CancellationToken = CancellationToken.None,
+            RequestModel = RequestModel.OpenAi,
+            Options = new TurnOptions
+            {
+                StructuredOutput = new StructuredOutputOptions
+                {
+                    OutputMode = "json_schema",
+                    JsonSchemaName = "math_answer",
+                    JsonSchema = JsonDocument.Parse("""{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}""").RootElement,
+                    JsonStrict = true
+                }
+            }
+        };
+
+        await turn.RunTurnAsync(new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hello!" }] });
+
+        IReadOnlyList<RawRequestReady> rawRequests = Events.GetEventsForSession<RawRequestReady>(session.Id);
+        Assert.Single(rawRequests);
+        Assert.Equal(expectedRequestBody, rawRequests[0].RawRequest);
+    }
+
+    [Fact]
+    public async Task TurnOmitsStructuredOutputFieldsWhenDisabled()
+    {
+        const string expectedRequestBody = """{"messages":[{"role":"developer","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"Hello!"}]}]}""";
+
+        await using FakeApiClientServer server = await FakeApiClientServer.StartAsync(
+            new Dictionary<string, string>
+            {
+                [expectedRequestBody] = """
+                {
+                    "id": "chatcmpl_structured_output_disabled",
+                    "object": "chat.completion",
+                    "created": 1710000000,
+                    "model": "gpt-5-nano",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "finish_reason": "stop",
+                            "message": {
+                                "role": "assistant",
+                                "content": "Hello from fake server.",
+                                "refusal": ""
+                            }
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 12,
+                        "completion_tokens": 7,
+                        "total_tokens": 19
+                    }
+                }
+                """
+            });
+
+        Session session = Sessions.CreateSession("You are a helpful assistant.");
+        Turn turn = new Turn
+        {
+            Session = session,
+            ApiClient = new ApiClient(server.Client),
+            ChatCompletionsUri = server.ChatCompletionsUri,
+            MaxIterations = 5,
+            CancellationToken = CancellationToken.None,
+            RequestModel = RequestModel.OpenAi,
+            Options = new TurnOptions()
+        };
+
+        await turn.RunTurnAsync(new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hello!" }] });
+
+        IReadOnlyList<RawRequestReady> rawRequests = Events.GetEventsForSession<RawRequestReady>(session.Id);
+        Assert.Single(rawRequests);
+        Assert.Equal(expectedRequestBody, rawRequests[0].RawRequest);
+        Assert.DoesNotContain("response_format", rawRequests[0].RawRequest);
+    }
+
+    [Fact]
     public async Task SingleTurnSession()
     {
         await using FakeApiClientServer server = await FakeApiClientServer.StartAsync();
