@@ -133,28 +133,31 @@ app.MapPost("/api/sessions/{sessionId}/messages", async (Guid sessionId, SendMes
             ChatCompletionsUri = GetChatCompletionsUri(body.model),
             MaxIterations = maxIterations,
             RequestModel = body.model,
-            StructuredOutput = new StructuredOutputOptions
+            Options = new TurnOptions
             {
-                OutputMode = body.outputMode,
-                JsonSchemaName = body.jsonSchemaName,
-                JsonSchema = body.jsonSchema,
-                JsonStrict = body.jsonStrict
-            },
-            OpenAi = body.openAi is null ? null : new OpenAiRequestOptions
-            {
-                ModelName = body.modelName,
-                PromptCacheKey = body.openAi.promptCacheKey,
-                ReasoningEffort = body.openAi.reasoningEffort,
-                Verbosity = body.openAi.verbosity,
-                ServiceTier = body.openAi.serviceTier
-            },
-            GptOss = body.gptOss is null ? null : new GptOssRequestOptions
-            {
-                ReasoningEffort = body.gptOss.reasoningEffort
-            },
-            Qwen = body.qwen is null ? null : new QwenRequestOptions
-            {
-                EnableThinking = body.qwen.enableThinking
+                StructuredOutput = string.IsNullOrWhiteSpace(body.outputMode) ? null : new StructuredOutputOptions
+                {
+                    OutputMode = body.outputMode,
+                    JsonSchemaName = body.jsonSchemaName,
+                    JsonSchema = body.jsonSchema,
+                    JsonStrict = body.jsonStrict
+                },
+                OpenAi = body.openAi is null ? null : new OpenAiRequestOptions
+                {
+                    ModelName = body.modelName,
+                    PromptCacheKey = body.openAi.promptCacheKey,
+                    ReasoningEffort = body.openAi.reasoningEffort,
+                    Verbosity = body.openAi.verbosity,
+                    ServiceTier = body.openAi.serviceTier
+                },
+                GptOss = body.gptOss is null ? null : new GptOssRequestOptions
+                {
+                    ReasoningEffort = body.gptOss.reasoningEffort
+                },
+                Qwen = body.qwen is null ? null : new QwenRequestOptions
+                {
+                    EnableThinking = body.qwen.enableThinking
+                }
             },
             CancellationToken = CancellationToken.None
         };
