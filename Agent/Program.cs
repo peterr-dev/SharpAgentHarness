@@ -255,6 +255,18 @@ static object MapEventForApi(Event evt)
             type = nameof(TurnCompleted),
             sessionId = turnCompleted.Session.Id
         },
+        StructuredOutputFinalContentInvalid structuredOutputFinalContentInvalid => new
+        {
+            type = nameof(StructuredOutputFinalContentInvalid),
+            sessionId = structuredOutputFinalContentInvalid.Session.Id,
+            details = new
+            {
+                outputMode = structuredOutputFinalContentInvalid.OutputMode,
+                errorPath = structuredOutputFinalContentInvalid.ErrorPath,
+                errorMessage = structuredOutputFinalContentInvalid.ErrorMessage,
+                contentPreview = structuredOutputFinalContentInvalid.ContentPreview
+            }
+        },
         _ => new
         {
             type = evt.GetType().Name,

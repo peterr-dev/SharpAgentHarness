@@ -62,6 +62,22 @@ namespace Core
         public TurnCompleted(Session session) : base(session) { }
     }
 
+    public sealed class StructuredOutputFinalContentInvalid : Event
+    {
+        public string OutputMode { get; }
+        public string ErrorPath { get; }
+        public string ErrorMessage { get; }
+        public string? ContentPreview { get; }
+
+        public StructuredOutputFinalContentInvalid(Session session, string outputMode, string errorPath, string errorMessage, string? contentPreview) : base(session)
+        {
+            OutputMode = outputMode ?? throw new ArgumentNullException(nameof(outputMode));
+            ErrorPath = errorPath ?? throw new ArgumentNullException(nameof(errorPath));
+            ErrorMessage = errorMessage ?? throw new ArgumentNullException(nameof(errorMessage));
+            ContentPreview = contentPreview;
+        }
+    }
+
     public static class Events
     {
         private static readonly List<object> _events = new();

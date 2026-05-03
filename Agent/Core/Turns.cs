@@ -1,4 +1,5 @@
 using Core.ChatCompletions;
+using System.Text.Json;
 using System.Threading;
 
 namespace Core
@@ -50,6 +51,7 @@ namespace Core
                         if (choice.FinishReason == FinishReason.Stop)
                         {
                             if (string.IsNullOrEmpty(choice.Message.Content)) throw new InvalidOperationException("LLM response does not contain content.");
+                            ValidateStructuredOutputFinalContent(Session, Options.StructuredOutput, choice.Message.Content);
 
                             Session.Messages.Add(new ChatCompletionAssistantMessageParam
                             {
@@ -193,5 +195,30 @@ namespace Core
             };
         }
 
+        private static void ValidateStructuredOutputFinalContent(Session session, StructuredOutputOptions? structuredOutput, string finalContent)
+        {
+            if (!string.Equals(structuredOutput?.OutputMode, "json_schema", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            try
+            {
+                JsonDocument.Parse(finalContent);
+            }
+            catch (JsonException ex)
+            {
+                string errorPath = string.IsNullOrWhiteSpace(ex.Path) ? "$" : ex.Path;
+                string preview = finalContent.Length <= 200 ? finalContent : $"{finalContent[..200]}...";
+                Events.Publish(new StructuredOutputFinalContentInvalid(
+                    session,
+                    structuredOutput.OutputMode!,
+                    errorPath,
+                    ex.Message,
+                    preview));
+
+                throw new ArgumentException($"Structured output parsing failed at path '{errorPath}': assistant final content is not valid JSON.");
+            }
+        }
     }
 }

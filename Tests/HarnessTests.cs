@@ -259,6 +259,72 @@ public class HarnessTests
     }
 
     [Fact]
+    public async Task TurnReturnsDeterministicErrorAndEventWhenStructuredOutputFinalContentIsNotJson()
+    {
+        const string expectedRequestBody = """{"messages":[{"role":"developer","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"Hello!"}]}],"response_format":{"type":"json_schema","json_schema":{"name":"math_answer","schema":{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false},"strict":true}}}""";
+
+        await using FakeApiClientServer server = await FakeApiClientServer.StartAsync(
+            new Dictionary<string, string>
+            {
+                [expectedRequestBody] = """
+                {
+                    "id": "chatcmpl_structured_output_bad_final_content",
+                    "object": "chat.completion",
+                    "created": 1710000000,
+                    "model": "gpt-5-nano",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "finish_reason": "stop",
+                            "message": {
+                                "role": "assistant",
+                                "content": "This is not JSON.",
+                                "refusal": ""
+                            }
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 12,
+                        "completion_tokens": 7,
+                        "total_tokens": 19
+                    }
+                }
+                """
+            });
+
+        Session session = Sessions.CreateSession("You are a helpful assistant.");
+        Turn turn = new Turn
+        {
+            Session = session,
+            ApiClient = new ApiClient(server.Client),
+            ChatCompletionsUri = server.ChatCompletionsUri,
+            MaxIterations = 5,
+            CancellationToken = CancellationToken.None,
+            RequestModel = RequestModel.OpenAi,
+            Options = new TurnOptions
+            {
+                StructuredOutput = new StructuredOutputOptions
+                {
+                    OutputMode = "json_schema",
+                    JsonSchemaName = "math_answer",
+                    JsonSchema = JsonDocument.Parse("""{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}""").RootElement,
+                    JsonStrict = true
+                }
+            }
+        };
+
+        ArgumentException ex = await Assert.ThrowsAsync<ArgumentException>(() =>
+            turn.RunTurnAsync(new ChatCompletionUserMessageParam { Content = [new ChatCompletionContentPartText { Text = "Hello!" }] }));
+
+        Assert.Equal("Structured output parsing failed at path '$': assistant final content is not valid JSON.", ex.Message);
+
+        StructuredOutputFinalContentInvalid parseErrorEvent = Assert.Single(Events.GetEventsForSession<StructuredOutputFinalContentInvalid>(session.Id));
+        Assert.Equal("json_schema", parseErrorEvent.OutputMode);
+        Assert.Equal("$", parseErrorEvent.ErrorPath);
+        Assert.Contains("not JSON", parseErrorEvent.ContentPreview);
+    }
+
+    [Fact]
     public async Task SingleTurnSession()
     {
         await using FakeApiClientServer server = await FakeApiClientServer.StartAsync();
