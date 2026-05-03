@@ -11,11 +11,11 @@ const requestDefinitions = {
     path: '/sessions/{sessionId}/messages',
     fields: [
       { key: 'sessionId', label: 'Session ID', type: 'text', placeholder: 'GUID', required: true },
-      { key: 'model', label: 'Request Profile', type: 'select', options: ['OpenAi', 'GptOss', 'Qwen36'], defaultValue: 'OpenAi' },
+      { key: 'model', label: 'Request Profile', type: 'select', options: ['OpenAi', 'GptOss', 'Qwen36'], defaultValue: 'GptOss' },
       { key: 'chatCompletionsUrl', label: 'Chat Completions URL', type: 'text', defaultValue: 'https://api.openai.com/v1/chat/completions', readOnly: true },
-      { key: 'message', label: 'Message', type: 'textarea', placeholder: 'Hello there', required: true },
+      { key: 'message', label: 'Message', type: 'textarea', defaultValue: 'Hi', required: true },
       { key: 'maxIterations', label: 'Max Iterations', type: 'text', placeholder: '5', defaultValue: '5' },
-      { key: 'toolkit', label: 'Toolkit', type: 'text', placeholder: 'Example', defaultValue: 'Example' },
+      { key: 'toolkit', label: 'Toolkit', type: 'text', placeholder: 'Example' },
       { key: 'modelName', label: 'Model Name', type: 'text', defaultValue: 'gpt-5-nano' },
       { key: 'promptCacheKey', label: 'Prompt Cache Key', type: 'text', placeholder: 'SharpAgentHarness', defaultValue: 'SharpAgentHarness' },
       {
@@ -37,7 +37,7 @@ const requestDefinitions = {
         label: 'Reasoning Effort',
         type: 'select',
         options: ['Low', 'Medium', 'High'],
-        defaultValue: 'Medium'
+        defaultValue: 'Low'
       },
       { key: 'enableThinking', label: 'Enable Thinking', type: 'select', options: ['true', 'false'], defaultValue: 'true' },
       {

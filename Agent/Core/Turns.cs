@@ -197,7 +197,8 @@ namespace Core
 
         private static void ValidateStructuredOutputFinalContent(Session session, StructuredOutputOptions? structuredOutput, string finalContent)
         {
-            if (!string.Equals(structuredOutput?.OutputMode, "json_schema", StringComparison.OrdinalIgnoreCase))
+            if (structuredOutput?.OutputMode is not string outputMode ||
+                !string.Equals(outputMode, "json_schema", StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
@@ -212,7 +213,7 @@ namespace Core
                 string preview = finalContent.Length <= 200 ? finalContent : $"{finalContent[..200]}...";
                 Events.Publish(new StructuredOutputFinalContentInvalid(
                     session,
-                    structuredOutput.OutputMode!,
+                    outputMode,
                     errorPath,
                     ex.Message,
                     preview));
