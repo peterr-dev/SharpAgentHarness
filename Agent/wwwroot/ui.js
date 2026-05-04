@@ -46,7 +46,12 @@ const requestDefinitions = {
         type: 'select',
         options: ['Low', 'Medium', 'High'],
         defaultValue: 'Low'
-      }
+      },
+      { key: 'structuredOutputSectionTitle', label: 'Structured Output', type: 'section-title' },
+      { key: 'structuredOutputEnabled', label: 'Enable Structured Output', type: 'select', options: ['false', 'true'], defaultValue: 'false' },
+      { key: 'jsonSchemaName', label: 'Schema Name', type: 'text', placeholder: 'structured_response', note: "Used when structured output is enabled. Defaults to 'structured_response'." },
+      { key: 'jsonStrict', label: 'Strict Schema', type: 'select', options: ['true', 'false'], defaultValue: 'true' },
+      { key: 'jsonSchema', label: 'Schema JSON', type: 'textarea', placeholder: '{\n  \"type\": \"object\",\n  \"properties\": {\n    \"summary\": { \"type\": \"string\" }\n  },\n  \"required\": [\"summary\"],\n  \"additionalProperties\": false\n}' }
     ]
   },
   'get-session': {
@@ -79,6 +84,7 @@ const modelChatCompletionsUrls = {
 };
 const gptOssOnlyFieldKeys = ['gptOssReasoningEffort'];
 const qwenOnlyFieldKeys = ['enableThinking'];
+const structuredOutputFieldKeys = ['jsonSchemaName', 'jsonStrict', 'jsonSchema'];
 
 
 // Keep track of the most recently created session so follow-up calls are quicker to fill in.
@@ -220,6 +226,17 @@ function updateRequestFieldVisibility() {
   if (modelUrlField) {
     modelUrlField.value = modelChatCompletionsUrls[selectedModel] || '';
   }
+
+  const structuredOutputEnabledField = dynamicFields.querySelector('[data-field="structuredOutputEnabled"]');
+  const structuredOutputEnabled = structuredOutputEnabledField?.value === 'true';
+  const structuredOutputSectionTitle = dynamicFields.querySelector('[data-field-row="structuredOutputSectionTitle"]');
+  if (structuredOutputSectionTitle) {
+    structuredOutputSectionTitle.classList.toggle('is-hidden', requestTypeSelect.value !== 'submit-message');
+  }
+  structuredOutputFieldKeys.forEach((fieldKey) => {
+    const row = dynamicFields.querySelector(`[data-field-row="${fieldKey}"]`);
+    if (row) row.classList.toggle('is-hidden', !structuredOutputEnabled);
+  });
 }
 
 function renderDynamicFields() {
@@ -227,6 +244,15 @@ function renderDynamicFields() {
   dynamicFields.innerHTML = '';
 
   definition.fields.forEach((field) => {
+    if (field.type === 'section-title') {
+      const heading = document.createElement('h3');
+      heading.className = 'response-block-title';
+      heading.textContent = field.label;
+      heading.dataset.fieldRow = field.key;
+      dynamicFields.appendChild(heading);
+      return;
+    }
+
     const row = document.createElement('div');
     row.className = `row ${field.type === 'textarea' ? 'row-top' : ''}`;
     row.dataset.fieldRow = field.key;
@@ -327,6 +353,24 @@ function parseOptionalInteger(value, fieldLabel) {
   return parsedValue;
 }
 
+function parseRequiredJson(value, fieldLabel) {
+  if (!value.trim()) {
+    throw new Error(`Field "${fieldLabel}" is required when structured output is enabled.`);
+  }
+
+  try {
+    const parsedJson = JSON.parse(value);
+    if (!parsedJson || typeof parsedJson !== 'object' || Array.isArray(parsedJson)) {
+      throw new Error('Schema JSON must be a JSON object.');
+    }
+
+    return parsedJson;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Field "${fieldLabel}" must be valid JSON. ${detail}`);
+  }
+}
+
 function formatIfJson(text) {
   try {
     return JSON.stringify(JSON.parse(text), null, 2);
@@ -409,6 +453,13 @@ function buildRequest() {
       payload.qwen = {
         enableThinking: values.enableThinking === 'true'
       };
+    }
+
+    if (values.structuredOutputEnabled === 'true') {
+      payload.outputMode = 'json_schema';
+      if (values.jsonSchemaName) payload.jsonSchemaName = values.jsonSchemaName;
+      payload.jsonStrict = values.jsonStrict !== 'false';
+      payload.jsonSchema = parseRequiredJson(values.jsonSchema, 'Schema JSON');
     }
   }
 
