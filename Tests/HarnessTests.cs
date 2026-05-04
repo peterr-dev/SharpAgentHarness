@@ -143,6 +143,35 @@ public class HarnessTests
     }
 
     [Fact]
+    public void RequestDefaultsJsonSchemaStructuredOutputToStrictWhenJsonStrictIsOmitted()
+    {
+        Request request = new OpenAiRequest
+        {
+            Messages =
+            [
+                new ChatCompletionDeveloperMessageParam
+                {
+                    Content = "You are a helpful assistant."
+                },
+                new ChatCompletionUserMessageParam
+                {
+                    Content = [new ChatCompletionContentPartText { Text = "Hello!" }]
+                }
+            ],
+            StructuredOutput = new StructuredOutputOptions
+            {
+                OutputMode = "json_schema",
+                JsonSchemaName = "math_answer",
+                JsonSchema = JsonDocument.Parse("""{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}""").RootElement
+            }
+        };
+
+        Assert.Equal(
+            """{"messages":[{"role":"developer","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"Hello!"}]}],"response_format":{"type":"json_schema","json_schema":{"name":"math_answer","schema":{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false},"strict":true}}}""",
+            request.ToJson());
+    }
+
+    [Fact]
     public async Task TurnIncludesStructuredOutputFieldsWhenEnabled()
     {
         const string expectedRequestBody = """{"messages":[{"role":"developer","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"Hello!"}]}],"response_format":{"type":"json_schema","json_schema":{"name":"math_answer","schema":{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false},"strict":true}}}""";

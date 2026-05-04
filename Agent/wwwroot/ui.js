@@ -47,10 +47,8 @@ const requestDefinitions = {
         options: ['Low', 'Medium', 'High'],
         defaultValue: 'Low'
       },
-      { key: 'structuredOutputSectionTitle', label: 'Structured Output', type: 'section-title' },
       { key: 'structuredOutputEnabled', label: 'Enable Structured Output', type: 'select', options: ['false', 'true'], defaultValue: 'false' },
-      { key: 'jsonSchemaName', label: 'Schema Name', type: 'text', placeholder: 'structured_response', note: "Used when structured output is enabled. Defaults to 'structured_response'." },
-      { key: 'jsonStrict', label: 'Strict Schema', type: 'select', options: ['true', 'false'], defaultValue: 'true' },
+      { key: 'jsonSchemaName', label: 'Schema Name', type: 'text', placeholder: 'structured_response' },
       { key: 'jsonSchema', label: 'Schema JSON', type: 'textarea', placeholder: '{\n  \"type\": \"object\",\n  \"properties\": {\n    \"summary\": { \"type\": \"string\" }\n  },\n  \"required\": [\"summary\"],\n  \"additionalProperties\": false\n}' }
     ]
   },
@@ -84,7 +82,7 @@ const modelChatCompletionsUrls = {
 };
 const gptOssOnlyFieldKeys = ['gptOssReasoningEffort'];
 const qwenOnlyFieldKeys = ['enableThinking'];
-const structuredOutputFieldKeys = ['jsonSchemaName', 'jsonStrict', 'jsonSchema'];
+const structuredOutputFieldKeys = ['jsonSchemaName', 'jsonSchema'];
 
 
 // Keep track of the most recently created session so follow-up calls are quicker to fill in.

@@ -129,10 +129,7 @@ namespace Core.ChatCompletions
                 ["schema"] = JsonNode.Parse(StructuredOutput.JsonSchema!.Value.GetRawText())
             };
 
-            if (StructuredOutput.JsonStrict != null)
-            {
-                jsonSchemaBody["strict"] = StructuredOutput.JsonStrict.Value;
-            }
+            jsonSchemaBody["strict"] = StructuredOutput.JsonStrict ?? true;
 
             body["response_format"] = new JsonObject
             {
