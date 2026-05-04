@@ -1,4 +1,5 @@
 using Core.ChatCompletions;
+using Json.Schema;
 using System.Text.Json;
 using System.Threading;
 
@@ -203,23 +204,87 @@ namespace Core
                 return;
             }
 
+            JsonDocument contentDocument;
+
             try
             {
-                JsonDocument.Parse(finalContent);
+                contentDocument = JsonDocument.Parse(finalContent);
             }
             catch (JsonException ex)
             {
-                string errorPath = string.IsNullOrWhiteSpace(ex.Path) ? "$" : ex.Path;
-                string preview = finalContent.Length <= 200 ? finalContent : $"{finalContent[..200]}...";
+                string jsonErrorPath = string.IsNullOrWhiteSpace(ex.Path) ? "$" : ex.Path;
+                string jsonPreview = finalContent.Length <= 200 ? finalContent : $"{finalContent[..200]}...";
                 Events.Publish(new StructuredOutputFinalContentInvalid(
                     session,
                     outputMode,
-                    errorPath,
+                    jsonErrorPath,
                     ex.Message,
-                    preview));
+                    jsonPreview));
 
-                throw new ArgumentException($"Structured output parsing failed at path '{errorPath}': assistant final content is not valid JSON.");
+                throw new ArgumentException($"Structured output parsing failed at path '{jsonErrorPath}': assistant final content is not valid JSON.");
             }
+
+            if (structuredOutput.JsonSchema is null)
+            {
+                return;
+            }
+
+            JsonSchema schema = JsonSchema.FromText(structuredOutput.JsonSchema.Value.GetRawText());
+            EvaluationResults validationResults = schema.Evaluate(contentDocument.RootElement, new EvaluationOptions
+            {
+                OutputFormat = OutputFormat.Hierarchical,
+                RequireFormatValidation = false
+            });
+
+            if (validationResults.IsValid)
+            {
+                return;
+            }
+
+            (string errorPath, string errorMessage) = FindFirstSchemaError(validationResults);
+
+            string preview = finalContent.Length <= 200 ? finalContent : $"{finalContent[..200]}...";
+
+            Events.Publish(new StructuredOutputFinalContentInvalid(
+                session,
+                outputMode,
+                errorPath,
+                errorMessage,
+                preview));
+
+            throw new ArgumentException($"Structured output validation failed at path '{errorPath}': assistant final content does not conform to the configured JSON schema.");
+        }
+
+        private static (string ErrorPath, string ErrorMessage) FindFirstSchemaError(EvaluationResults root)
+        {
+            Queue<EvaluationResults> queue = new();
+            queue.Enqueue(root);
+
+            while (queue.Count > 0)
+            {
+                EvaluationResults current = queue.Dequeue();
+                if (!current.IsValid)
+                {
+                    KeyValuePair<string, string>? firstError = current.Errors?.FirstOrDefault();
+                    if (firstError is not null)
+                    {
+                        string instancePath = string.IsNullOrWhiteSpace(current.InstanceLocation.ToString())
+                            ? "$"
+                            : current.InstanceLocation.ToString();
+                        return (instancePath, firstError.Value.Value);
+                    }
+                }
+
+                if (current.Details is not null)
+                {
+                    foreach (EvaluationResults detail in current.Details)
+                    {
+                        queue.Enqueue(detail);
+                    }
+                }
+            }
+
+            return ("$", "Assistant final content does not conform to the configured JSON schema.");
         }
     }
 }
