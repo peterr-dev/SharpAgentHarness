@@ -203,23 +203,122 @@ namespace Core
                 return;
             }
 
+            JsonDocument contentDocument;
+
             try
             {
-                JsonDocument.Parse(finalContent);
+                contentDocument = JsonDocument.Parse(finalContent);
             }
             catch (JsonException ex)
             {
-                string errorPath = string.IsNullOrWhiteSpace(ex.Path) ? "$" : ex.Path;
-                string preview = finalContent.Length <= 200 ? finalContent : $"{finalContent[..200]}...";
+                string jsonErrorPath = string.IsNullOrWhiteSpace(ex.Path) ? "$" : ex.Path;
+                string jsonPreview = finalContent.Length <= 200 ? finalContent : $"{finalContent[..200]}...";
                 Events.Publish(new StructuredOutputFinalContentInvalid(
                     session,
                     outputMode,
-                    errorPath,
+                    jsonErrorPath,
                     ex.Message,
-                    preview));
+                    jsonPreview));
 
-                throw new ArgumentException($"Structured output parsing failed at path '{errorPath}': assistant final content is not valid JSON.");
+                throw new ArgumentException($"Structured output parsing failed at path '{jsonErrorPath}': assistant final content is not valid JSON.");
             }
+
+            if (structuredOutput.JsonSchema is null)
+            {
+                return;
+            }
+
+            if (TryValidateAgainstSchema(contentDocument.RootElement, structuredOutput.JsonSchema.Value, "$", out string errorPath, out string errorMessage))
+            {
+                return;
+            }
+
+            string preview = finalContent.Length <= 200 ? finalContent : $"{finalContent[..200]}...";
+
+            Events.Publish(new StructuredOutputFinalContentInvalid(
+                session,
+                outputMode,
+                errorPath,
+                errorMessage,
+                preview));
+
+            throw new ArgumentException($"Structured output validation failed at path '{errorPath}': assistant final content does not conform to the configured JSON schema.");
         }
+
+        // This validator intentionally focuses on common JSON Schema keywords used by the harness examples.
+        private static bool TryValidateAgainstSchema(JsonElement instance, JsonElement schema, string path, out string errorPath, out string errorMessage)
+        {
+            if (schema.TryGetProperty("type", out JsonElement typeElement) &&
+                typeElement.ValueKind == JsonValueKind.String)
+            {
+                string expectedType = typeElement.GetString()!;
+                if (!MatchesType(instance, expectedType))
+                {
+                    errorPath = path;
+                    errorMessage = $"Expected type '{expectedType}'.";
+                    return false;
+                }
+            }
+
+            if (schema.TryGetProperty("required", out JsonElement requiredElement) && instance.ValueKind == JsonValueKind.Object)
+            {
+                foreach (JsonElement requiredNameElement in requiredElement.EnumerateArray())
+                {
+                    string requiredName = requiredNameElement.GetString()!;
+                    if (!instance.TryGetProperty(requiredName, out _))
+                    {
+                        errorPath = path;
+                        errorMessage = $"Missing required property '{requiredName}'.";
+                        return false;
+                    }
+                }
+            }
+
+            if (schema.TryGetProperty("properties", out JsonElement propertiesElement) && instance.ValueKind == JsonValueKind.Object)
+            {
+                HashSet<string> allowedProperties = new(StringComparer.Ordinal);
+
+                foreach (JsonProperty schemaProperty in propertiesElement.EnumerateObject())
+                {
+                    allowedProperties.Add(schemaProperty.Name);
+
+                    if (instance.TryGetProperty(schemaProperty.Name, out JsonElement propertyInstance) &&
+                        !TryValidateAgainstSchema(propertyInstance, schemaProperty.Value, $"{path}.{schemaProperty.Name}", out errorPath, out errorMessage))
+                    {
+                        return false;
+                    }
+                }
+
+                if (schema.TryGetProperty("additionalProperties", out JsonElement additionalPropertiesElement) &&
+                    additionalPropertiesElement.ValueKind == JsonValueKind.False)
+                {
+                    foreach (JsonProperty instanceProperty in instance.EnumerateObject())
+                    {
+                        if (!allowedProperties.Contains(instanceProperty.Name))
+                        {
+                            errorPath = $"{path}.{instanceProperty.Name}";
+                            errorMessage = "Property is not allowed by the schema.";
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            errorPath = path;
+            errorMessage = string.Empty;
+            return true;
+        }
+
+        private static bool MatchesType(JsonElement instance, string expectedType) => expectedType switch
+        {
+            "object" => instance.ValueKind == JsonValueKind.Object,
+            "array" => instance.ValueKind == JsonValueKind.Array,
+            "string" => instance.ValueKind == JsonValueKind.String,
+            "number" => instance.ValueKind == JsonValueKind.Number,
+            "integer" => instance.ValueKind == JsonValueKind.Number && instance.TryGetInt64(out _),
+            "boolean" => instance.ValueKind is JsonValueKind.True or JsonValueKind.False,
+            "null" => instance.ValueKind == JsonValueKind.Null,
+            _ => true
+        };
     }
 }
