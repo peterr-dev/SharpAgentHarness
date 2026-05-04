@@ -305,6 +305,7 @@ function renderDynamicFields() {
 
   const sessionIdField = dynamicFields.querySelector('[data-field="sessionId"]');
   const modelField = dynamicFields.querySelector('[data-field="model"]');
+  const structuredOutputEnabledField = dynamicFields.querySelector('[data-field="structuredOutputEnabled"]');
 
   if (sessionIdField) {
     sessionIdField.addEventListener('input', updateRequestFieldVisibility);
@@ -313,6 +314,10 @@ function renderDynamicFields() {
   if (modelField) {
     modelField.addEventListener('input', updateRequestFieldVisibility);
     modelField.addEventListener('change', updateRequestFieldVisibility);
+  }
+  if (structuredOutputEnabledField) {
+    structuredOutputEnabledField.addEventListener('input', updateRequestFieldVisibility);
+    structuredOutputEnabledField.addEventListener('change', updateRequestFieldVisibility);
   }
 
   populateSessionIdFieldIfAvailable();
