@@ -234,6 +234,85 @@ public class HarnessTests
     }
 
     [Fact]
+    public async Task TurnWithStructuredOutputEnabledReturnsValidJsonAndExpectedEventTrace()
+    {
+        const string expectedRequestBody = """{"messages":[{"role":"developer","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"Give me the answer as JSON."}]}],"response_format":{"type":"json_schema","json_schema":{"name":"math_answer","schema":{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false},"strict":true}}}""";
+
+        await using FakeApiClientServer server = await FakeApiClientServer.StartAsync(
+            new Dictionary<string, string>
+            {
+                [expectedRequestBody] = """
+                {
+                    "id": "chatcmpl_structured_output_happy_path",
+                    "object": "chat.completion",
+                    "created": 1710000000,
+                    "model": "gpt-5-nano",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "finish_reason": "stop",
+                            "message": {
+                                "role": "assistant",
+                                "content": "{\"answer\":\"42\"}",
+                                "refusal": ""
+                            }
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 12,
+                        "completion_tokens": 7,
+                        "total_tokens": 19
+                    }
+                }
+                """
+            });
+
+        Session session = Sessions.CreateSession("You are a helpful assistant.");
+        Turn turn = new Turn
+        {
+            Session = session,
+            ApiClient = new ApiClient(server.Client),
+            ChatCompletionsUri = server.ChatCompletionsUri,
+            MaxIterations = 5,
+            CancellationToken = CancellationToken.None,
+            RequestModel = RequestModel.OpenAi,
+            Options = new TurnOptions
+            {
+                StructuredOutput = new StructuredOutputOptions
+                {
+                    OutputMode = "json_schema",
+                    JsonSchemaName = "math_answer",
+                    JsonSchema = JsonDocument.Parse("""{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}""").RootElement,
+                    JsonStrict = true
+                }
+            }
+        };
+
+        ChatCompletionMessage response = await turn.RunTurnAsync(new ChatCompletionUserMessageParam
+        {
+            Content = [new ChatCompletionContentPartText { Text = "Give me the answer as JSON." }]
+        });
+
+        string responseContent = Assert.IsType<string>(response.Content);
+        Assert.Equal("{\"answer\":\"42\"}", responseContent);
+
+        JsonElement parsedResponse = JsonDocument.Parse(responseContent).RootElement;
+        Assert.Equal("42", parsedResponse.GetProperty("answer").GetString());
+
+        SuccessResponse successResponse = Assert.IsType<SuccessResponse>(Assert.Single(Events.GetEventsForSession<ResponseReceived>(session.Id)).Response);
+        ChatCompletionChoice choice = Assert.Single(successResponse.Choices);
+        Assert.Equal("{\"answer\":\"42\"}", choice.Message.Content);
+
+        IReadOnlyList<Event> turnEvents = Events.GetEventsForSession(session.Id);
+        Type[] eventTypes = turnEvents.Select(evt => evt.GetType()).ToArray();
+        Assert.Equal(
+            [typeof(TurnStarted), typeof(RequestReady), typeof(RawRequestReady), typeof(RawResponseReceived), typeof(ResponseReceived), typeof(TurnCompleted)],
+            eventTypes);
+
+        Assert.Empty(Events.GetEventsForSession<StructuredOutputFinalContentInvalid>(session.Id));
+    }
+
+    [Fact]
     public async Task TurnOmitsStructuredOutputFieldsWhenDisabled()
     {
         const string expectedRequestBody = """{"messages":[{"role":"developer","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"Hello!"}]}]}""";
