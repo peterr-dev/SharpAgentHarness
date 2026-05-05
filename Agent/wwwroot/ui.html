@@ -63,10 +63,19 @@
 
             <div class="response-block">
               <div class="response-block-header">
-                <h3 class="response-block-title">Response Body</h3>
+                <h3 class="response-block-title">Raw Response Body</h3>
                 <button class="copy-btn" id="copyBtn" type="button">Copy</button>
               </div>
               <pre id="responseBody">Send a request to see the response here.</pre>
+            </div>
+
+            <div class="response-block parsed-block">
+              <div class="response-block-header">
+                <h3 class="response-block-title">Parsed JSON</h3>
+                <button class="copy-btn" id="copyParsedBtn" type="button">Copy</button>
+              </div>
+              <p id="parsedStatus" class="parsed-status parsed-status-idle">Send a request to inspect structured JSON output.</p>
+              <pre id="parsedResponseBody">No parsed JSON available yet.</pre>
             </div>
           </div>
         </div>

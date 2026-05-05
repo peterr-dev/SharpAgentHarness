@@ -330,6 +330,33 @@ pre {
   background: var(--success-bg);
 }
 
+
+.parsed-block {
+  margin-top: 16px;
+}
+
+.parsed-status {
+  margin: 0;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.parsed-status-idle {
+  color: var(--muted);
+  background: #f9fafb;
+}
+
+.parsed-status-success {
+  color: var(--success);
+  background: var(--success-bg);
+}
+
+.parsed-status-error {
+  color: var(--error);
+  background: var(--error-bg);
+}
+
 @media (max-width: 960px) {
   .grid {
     grid-template-columns: 1fr;
