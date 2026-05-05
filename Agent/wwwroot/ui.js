@@ -73,9 +73,6 @@ const statusPill = document.getElementById('statusPill');
 const cachePill = document.getElementById('cachePill');
 const responseBody = document.getElementById('responseBody');
 const copyBtn = document.getElementById('copyBtn');
-const copyParsedBtn = document.getElementById('copyParsedBtn');
-const parsedStatus = document.getElementById('parsedStatus');
-const parsedResponseBody = document.getElementById('parsedResponseBody');
 
 const openAiOnlyFieldKeys = ['modelName', 'promptCacheKey', 'serviceTier', 'reasoningEffort', 'verbosity'];
 const modelChatCompletionsUrls = {
@@ -412,53 +409,8 @@ async function callApi(url, method, payload) {
 }
 
 
-function setParsedStatus(message, tone = 'idle') {
-  parsedStatus.textContent = message;
-  parsedStatus.className = `parsed-status parsed-status-${tone}`;
-}
-
-function getParsedResponseDetails(responseText) {
-  const trimmedResponse = responseText.trim();
-
-  if (!trimmedResponse) {
-    return {
-      isValid: false,
-      message: 'Response body is empty, so there is no JSON to parse.'
-    };
-  }
-
-  try {
-    const parsedJson = JSON.parse(trimmedResponse);
-
-    return {
-      isValid: true,
-      formattedJson: JSON.stringify(parsedJson, null, 2)
-    };
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    return {
-      isValid: false,
-      message: `Could not parse response as JSON. ${detail}`
-    };
-  }
-}
-
-function renderParsedResponse(responseText) {
-  const parsedDetails = getParsedResponseDetails(responseText);
-
-  if (parsedDetails.isValid) {
-    parsedResponseBody.textContent = parsedDetails.formattedJson;
-    setParsedStatus('Parsed successfully. You can inspect and copy this JSON.', 'success');
-    return;
-  }
-
-  parsedResponseBody.textContent = 'No valid JSON parsed from the latest response.';
-  setParsedStatus(parsedDetails.message, 'error');
-}
-
 function setResponsePanels(rawText) {
   responseBody.textContent = formatIfJson(rawText) || '(empty response body)';
-  renderParsedResponse(rawText);
 }
 
 function buildRequest() {
@@ -532,8 +484,6 @@ async function sendRequest() {
   sendBtn.textContent = 'Sending...';
   setStatus('Sending request', 'idle');
   responseBody.textContent = '';
-  parsedResponseBody.textContent = '';
-  setParsedStatus('Waiting for response...', 'idle');
 
   try {
     const request = buildRequest();
@@ -595,8 +545,6 @@ function clearAll() {
   setStatus('Waiting for request', 'idle');
   setCacheStatus('Cache status unavailable', 'unknown');
   responseBody.textContent = 'Send a request to see the response here.';
-  parsedResponseBody.textContent = 'No parsed JSON available yet.';
-  setParsedStatus('Send a request to inspect structured JSON output.', 'idle');
 }
 
 requestTypeSelect.addEventListener('change', renderDynamicFields);
@@ -620,26 +568,6 @@ copyBtn.addEventListener('click', async () => {
     copyBtn.textContent = 'Failed';
     setTimeout(() => {
       copyBtn.textContent = 'Copy';
-    }, 2000);
-  }
-});
-
-copyParsedBtn.addEventListener('click', async () => {
-  const text = parsedResponseBody.textContent;
-  if (!text || text === 'No valid JSON parsed from the latest response.' || text === 'No parsed JSON available yet.') return;
-
-  try {
-    await navigator.clipboard.writeText(text);
-    copyParsedBtn.textContent = 'Copied!';
-    copyParsedBtn.classList.add('copied');
-    setTimeout(() => {
-      copyParsedBtn.textContent = 'Copy';
-      copyParsedBtn.classList.remove('copied');
-    }, 2000);
-  } catch {
-    copyParsedBtn.textContent = 'Failed';
-    setTimeout(() => {
-      copyParsedBtn.textContent = 'Copy';
     }, 2000);
   }
 });
