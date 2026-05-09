@@ -28,12 +28,12 @@ namespace Core.ChatCompletions
 
     public sealed class GptOssRequestOptions
     {
-        public GptOssReasoningEffort? ReasoningEffort { get; init; }
+        public required GptOssReasoningEffort ReasoningEffort { get; init; }
     }
 
     public sealed class QwenRequestOptions
     {
-        public bool? EnableThinking { get; init; }
+        public required bool EnableThinking { get; init; }
     }
 
     public sealed class TurnOptions
@@ -65,10 +65,12 @@ namespace Core.ChatCompletions
                 RequestModel.GptOss => new GptOssRequest
                 {
                     ReasoningEffort = options.GptOss?.ReasoningEffort
+                        ?? throw new ArgumentException("GptOss reasoningEffort is required when using the GptOss request model.", nameof(options))
                 },
                 RequestModel.Qwen36 => new QwenRequest
                 {
                     EnableThinking = options.Qwen?.EnableThinking
+                        ?? throw new ArgumentException("Qwen enableThinking is required when using the Qwen36 request model.", nameof(options))
                 },
                 _ => throw new InvalidOperationException($"Unsupported model: {requestModel}")
             };
