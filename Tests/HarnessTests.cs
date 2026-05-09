@@ -86,7 +86,7 @@ public class HarnessTests
     }
 
     [Fact]
-    public void RequestOmitsChatTemplateKwargsWhenLocalReasoningEffortIsUnset()
+    public void RequestRequiresAndSerialisesLocalReasoningEffort()
     {
         Request request = new GptOssRequest
         {
@@ -100,12 +100,89 @@ public class HarnessTests
                 {
                     Content = [new ChatCompletionContentPartText { Text = "Hello!" }]
                 }
-            ]
+            ],
+            ReasoningEffort = GptOssReasoningEffort.Low
         };
 
         Assert.Equal(
-            """{"messages":[{"role":"developer","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"Hello!"}]}]}""",
+            """{"messages":[{"role":"developer","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"Hello!"}]}],"chat_template_kwargs":{"reasoning_effort":"low"}}""",
             request.ToJson());
+    }
+
+    [Fact]
+    public void RequestFactoryThrowsWhenGptOssOptionsAreNull()
+    {
+        TurnOptions options = new TurnOptions
+        {
+            GptOss = null
+        };
+
+        ArgumentException ex = Assert.Throws<ArgumentException>(() => RequestFactory.Create(
+                RequestModel.GptOss,
+                [
+                    new ChatCompletionDeveloperMessageParam
+                    {
+                        Content = "You are a helpful assistant."
+                    },
+                    new ChatCompletionUserMessageParam
+                    {
+                        Content = [new ChatCompletionContentPartText { Text = "Hello!" }]
+                    }
+                ],
+                tools: null,
+                options));
+
+        Assert.Contains("reasoningEffort is required", ex.Message);
+    }
+
+    [Fact]
+    public void RequestRequiresAndSerialisesQwenEnableThinking()
+    {
+        Request request = new QwenRequest
+        {
+            Messages =
+            [
+                new ChatCompletionDeveloperMessageParam
+                {
+                    Content = "You are a helpful assistant."
+                },
+                new ChatCompletionUserMessageParam
+                {
+                    Content = [new ChatCompletionContentPartText { Text = "Hello!" }]
+                }
+            ],
+            EnableThinking = true
+        };
+
+        Assert.Equal(
+            """{"messages":[{"role":"developer","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"Hello!"}]}],"chat_template_kwargs":{"enable_thinking":true}}""",
+            request.ToJson());
+    }
+
+    [Fact]
+    public void RequestFactoryThrowsWhenQwenOptionsAreNull()
+    {
+        TurnOptions options = new TurnOptions
+        {
+            Qwen = null
+        };
+
+        ArgumentException ex = Assert.Throws<ArgumentException>(() => RequestFactory.Create(
+                RequestModel.Qwen36,
+                [
+                    new ChatCompletionDeveloperMessageParam
+                    {
+                        Content = "You are a helpful assistant."
+                    },
+                    new ChatCompletionUserMessageParam
+                    {
+                        Content = [new ChatCompletionContentPartText { Text = "Hello!" }]
+                    }
+                ],
+                tools: null,
+                options));
+
+        Assert.Contains("enableThinking is required", ex.Message);
     }
 
 

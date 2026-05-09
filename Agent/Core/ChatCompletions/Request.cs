@@ -160,33 +160,27 @@ namespace Core.ChatCompletions
 
     public sealed class GptOssRequest : Request
     {
-        public GptOssReasoningEffort? ReasoningEffort { get; set; }
+        public required GptOssReasoningEffort ReasoningEffort { get; set; }
 
         protected override void AddModelSpecificFields(JsonObject body)
         {
-            if (ReasoningEffort != null)
+            body["chat_template_kwargs"] = new JsonObject
             {
-                body["chat_template_kwargs"] = new JsonObject
-                {
-                    ["reasoning_effort"] = ReasoningEffort.Value.ToString().ToLowerInvariant()
-                };
-            }
+                ["reasoning_effort"] = ReasoningEffort.ToString().ToLowerInvariant()
+            };
         }
     }
 
     public sealed class QwenRequest : Request
     {
-        public bool? EnableThinking { get; set; }
+        public required bool EnableThinking { get; set; }
 
         protected override void AddModelSpecificFields(JsonObject body)
         {
-            if (EnableThinking != null)
+            body["chat_template_kwargs"] = new JsonObject
             {
-                body["chat_template_kwargs"] = new JsonObject
-                {
-                    ["enable_thinking"] = EnableThinking.Value
-                };
-            }
+                ["enable_thinking"] = EnableThinking
+            };
         }
     }
 

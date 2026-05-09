@@ -413,9 +413,9 @@ record OpenAiOptions(
     ServiceTier? serviceTier);
 
 record GptOssOptions(
-    GptOssReasoningEffort? reasoningEffort);
+    GptOssReasoningEffort reasoningEffort);
 
 record QwenOptions(
-    bool? enableThinking);
+    bool enableThinking);
 
 public partial class Program;
