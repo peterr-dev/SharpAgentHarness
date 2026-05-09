@@ -10,6 +10,10 @@ A minimal, general-purpose agent harness written in C#/.NET, providing a foundat
 - A typed wrapper around a pragmatic subset of the Chat Completions API.
 - A lightweight Web UI for interacting with the agent harness API.
 
+## Dependencies
+
+This repository has no external package dependencies beyond the .NET framework and the .NET SDK required to build and run it.
+
 ## Project Structure
 
 - `Agent` - Agent harness hosting the API (and Web UI for harness simplicity).
