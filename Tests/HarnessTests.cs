@@ -683,6 +683,71 @@ public class HarnessTests
         }
 
     [Fact]
+    public async Task TurnUsesQwenEnableThinkingForChatCompletionsRequests()
+    {
+        const string expectedRequestBody = """{"messages":[{"role":"developer","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"Hello!"}]}],"chat_template_kwargs":{"enable_thinking":true}}""";
+
+        await using FakeApiClientServer server = await FakeApiClientServer.StartAsync(
+            new Dictionary<string, string>
+            {
+                [expectedRequestBody] = """
+                {
+                    "id": "chatcmpl_test_qwen_thinking",
+                    "object": "chat.completion",
+                    "created": 1710000001,
+                    "model": "qwen-3.6",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "finish_reason": "stop",
+                            "message": {
+                                "role": "assistant",
+                                "content": "Hello from fake Qwen server.",
+                                "refusal": ""
+                            }
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 11,
+                        "completion_tokens": 6,
+                        "total_tokens": 17
+                    }
+                }
+                """
+            });
+
+        Session session = Sessions.CreateSession("You are a helpful assistant.");
+        Turn turn = new Turn
+        {
+            Session = session,
+            ApiClient = new ApiClient(server.Client),
+            ChatCompletionsUri = server.ChatCompletionsUri,
+            MaxIterations = 5,
+            CancellationToken = CancellationToken.None,
+            RequestModel = RequestModel.Qwen36,
+            Options = new TurnOptions
+            {
+                Qwen = new QwenRequestOptions
+                {
+                    EnableThinking = true
+                }
+            }
+        };
+
+        ChatCompletionMessage response = await turn.RunTurnAsync(new ChatCompletionUserMessageParam
+        {
+            Content = [new ChatCompletionContentPartText { Text = "Hello!" }]
+        });
+
+        IReadOnlyList<RawRequestReady> rawRequests = Events.GetEventsForSession<RawRequestReady>(session.Id);
+
+        Assert.Equal("Hello from fake Qwen server.", response.Content);
+        Assert.Single(rawRequests);
+        Assert.Equal(expectedRequestBody, rawRequests[0].RawRequest);
+        Assert.DoesNotContain("\"reasoning_effort\":", rawRequests[0].RawRequest);
+    }
+
+    [Fact]
     public async Task MultiTurnSessionWithToolUsage()
     {
         // Arrange
