@@ -58,3 +58,6 @@ nunit-*.xml
 
 # User-specific IDE settings
 *.user
+
+# Language Server cache files
+*.lscache
