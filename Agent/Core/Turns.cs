@@ -35,7 +35,7 @@ namespace Core
 
                     Request request = RequestFactory.Create(
                         RequestModel,
-                        BuildRequestMessages(Session.Messages, turnStartIndex),
+                        BuildRequestMessages(Session.Messages, turnStartIndex, RequestModel),
                         Toolkit?.Tools,
                         Options);
 
@@ -125,19 +125,19 @@ namespace Core
         }
 
         // Build the messages for the next request based on the Session; we clone messages as some need to be modified, specifically removing reasoning from prior turns
-        private static List<ChatCompletionMessageParam> BuildRequestMessages(List<ChatCompletionMessageParam> sourceMessages, int turnStartIndex)
+        private static List<ChatCompletionMessageParam> BuildRequestMessages(List<ChatCompletionMessageParam> sourceMessages, int turnStartIndex, RequestModel requestModel)
         {
             List<ChatCompletionMessageParam> messagesForNextRequest = new List<ChatCompletionMessageParam>(sourceMessages.Count);
 
             for (int index = 0; index < sourceMessages.Count; index++)
             {
-                messagesForNextRequest.Add(CloneMessageForRequest(sourceMessages[index], index, turnStartIndex));
+                messagesForNextRequest.Add(CloneMessageForRequest(sourceMessages[index], index, turnStartIndex, requestModel));
             }
 
             return messagesForNextRequest;
         }
 
-        private static ChatCompletionMessageParam CloneMessageForRequest(ChatCompletionMessageParam message, int index, int turnStartIndex)
+        private static ChatCompletionMessageParam CloneMessageForRequest(ChatCompletionMessageParam message, int index, int turnStartIndex, RequestModel requestModel)
         {
             return message switch
             {
@@ -154,17 +154,19 @@ namespace Core
                     ToolCallId = toolMessage.ToolCallId,
                     Content = toolMessage.Content
                 },
-                ChatCompletionAssistantMessageParam assistantMessage => CreateAssistantRequestMessage(assistantMessage, index, turnStartIndex),
+                ChatCompletionAssistantMessageParam assistantMessage => CreateAssistantRequestMessage(assistantMessage, index, turnStartIndex, requestModel),
                 _ => throw new InvalidOperationException($"Unsupported message type: {message.GetType().Name}")
             };
         }
 
-        private static ChatCompletionAssistantMessageParam CreateAssistantRequestMessage(ChatCompletionAssistantMessageParam assistantMessage, int index, int turnStartIndex)
+        private static ChatCompletionAssistantMessageParam CreateAssistantRequestMessage(ChatCompletionAssistantMessageParam assistantMessage, int index, int turnStartIndex, RequestModel requestModel)
         {
             List<ChatCompletionMessageToolCall>? toolCalls = assistantMessage.ToolCalls?.Select(CloneToolCall).ToList();
             List<ChatCompletionContentPart>? content = assistantMessage.Content?.ToList();
 
-            if (index < turnStartIndex)
+            bool shouldIncludePriorTurnReasoning = requestModel == RequestModel.Qwen36;
+
+            if (index < turnStartIndex && !shouldIncludePriorTurnReasoning)
             {
                 // Omit reasoning from prior turns.
                 return new ChatCompletionAssistantMessageParam
