@@ -1,5 +1,6 @@
 using Core;
 using Core.ChatCompletions;
+using Core.ChatCompletions.Models;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -130,9 +131,8 @@ app.MapPost("/api/sessions/{sessionId}/messages", async (Guid sessionId, SendMes
             Session = session,
             Toolkit = toolkit,
             ApiClient = apiClient,
-            ChatCompletionsUri = GetChatCompletionsUri(body.model),
+            ChatModel = ModelRegistry.Get(body.model),
             MaxIterations = maxIterations,
-            RequestModel = body.model,
             Options = new TurnOptions
             {
                 StructuredOutput = string.IsNullOrWhiteSpace(body.outputMode) ? null : new StructuredOutputOptions
@@ -273,20 +273,6 @@ static object MapEventForApi(Event evt)
             sessionId = evt.Session.Id
         }
     };
-}
-
-// Convert internal request type to the same JSON shape sent to chat completions.
-static Uri GetChatCompletionsUri(RequestModel model)
-{
-    string uri = model switch
-    {
-        RequestModel.OpenAi => "https://api.openai.com/v1/chat/completions",
-        RequestModel.GptOss => "http://localhost:8080/chat/completions",
-        RequestModel.Qwen36 => "http://localhost:8080/chat/completions",
-        _ => throw new InvalidOperationException($"Unsupported model: {model}")
-    };
-
-    return new Uri(uri);
 }
 
 static JsonElement MapRequestForApi(Request request)

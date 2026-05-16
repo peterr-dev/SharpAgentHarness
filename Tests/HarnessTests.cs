@@ -1,5 +1,6 @@
 using Core;
 using Core.ChatCompletions;
+using Core.ChatCompletions.Models;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -287,10 +288,9 @@ public class HarnessTests
         {
             Session = session,
             ApiClient = new ApiClient(server.Client),
-            ChatCompletionsUri = server.ChatCompletionsUri,
             MaxIterations = 5,
             CancellationToken = CancellationToken.None,
-            RequestModel = RequestModel.OpenAi,
+            ChatModel = ModelRegistry.Get(RequestModel.OpenAi),
             Options = new TurnOptions
             {
                 StructuredOutput = new StructuredOutputOptions
@@ -349,10 +349,9 @@ public class HarnessTests
         {
             Session = session,
             ApiClient = new ApiClient(server.Client),
-            ChatCompletionsUri = server.ChatCompletionsUri,
             MaxIterations = 5,
             CancellationToken = CancellationToken.None,
-            RequestModel = RequestModel.OpenAi,
+            ChatModel = ModelRegistry.Get(RequestModel.OpenAi),
             Options = new TurnOptions
             {
                 StructuredOutput = new StructuredOutputOptions
@@ -428,10 +427,9 @@ public class HarnessTests
         {
             Session = session,
             ApiClient = new ApiClient(server.Client),
-            ChatCompletionsUri = server.ChatCompletionsUri,
             MaxIterations = 5,
             CancellationToken = CancellationToken.None,
-            RequestModel = RequestModel.OpenAi,
+            ChatModel = ModelRegistry.Get(RequestModel.OpenAi),
             Options = new TurnOptions()
         };
 
@@ -482,10 +480,9 @@ public class HarnessTests
         {
             Session = session,
             ApiClient = new ApiClient(server.Client),
-            ChatCompletionsUri = server.ChatCompletionsUri,
             MaxIterations = 5,
             CancellationToken = CancellationToken.None,
-            RequestModel = RequestModel.OpenAi,
+            ChatModel = ModelRegistry.Get(RequestModel.OpenAi),
             Options = new TurnOptions
             {
                 StructuredOutput = new StructuredOutputOptions
@@ -548,10 +545,9 @@ public class HarnessTests
         {
             Session = session,
             ApiClient = new ApiClient(server.Client),
-            ChatCompletionsUri = server.ChatCompletionsUri,
             MaxIterations = 5,
             CancellationToken = CancellationToken.None,
-            RequestModel = RequestModel.OpenAi,
+            ChatModel = ModelRegistry.Get(RequestModel.OpenAi),
             Options = new TurnOptions
             {
                 StructuredOutput = new StructuredOutputOptions
@@ -596,9 +592,8 @@ public class HarnessTests
         {
             Session = session,
             ApiClient = apiClient,
-            ChatCompletionsUri = server.ChatCompletionsUri,
             MaxIterations = 5,
-            RequestModel = RequestModel.OpenAi,
+            ChatModel = ModelRegistry.Get(RequestModel.OpenAi),
             Options = new TurnOptions(),
             CancellationToken = CancellationToken.None
         };
@@ -656,10 +651,9 @@ public class HarnessTests
                 {
                         Session = session,
                         ApiClient = new ApiClient(server.Client),
-                        ChatCompletionsUri = server.ChatCompletionsUri,
                         MaxIterations = 5,
                         CancellationToken = CancellationToken.None,
-                        RequestModel = RequestModel.GptOss,
+                        ChatModel = ModelRegistry.Get(RequestModel.GptOss),
                         Options = new TurnOptions
                         {
                             GptOss = new GptOssRequestOptions
@@ -721,10 +715,9 @@ public class HarnessTests
         {
             Session = session,
             ApiClient = new ApiClient(server.Client),
-            ChatCompletionsUri = server.ChatCompletionsUri,
             MaxIterations = 5,
             CancellationToken = CancellationToken.None,
-            RequestModel = RequestModel.Qwen36,
+            ChatModel = ModelRegistry.Get(RequestModel.Qwen36),
             Options = new TurnOptions
             {
                 Qwen = new QwenRequestOptions
@@ -862,11 +855,10 @@ public class HarnessTests
         {
             Session = session,
             ApiClient = fakeApiClient,
-            ChatCompletionsUri = server.ChatCompletionsUri,
             MaxIterations = 5,
             CancellationToken = CancellationToken.None,
             Toolkit = toolkit,
-            RequestModel = RequestModel.OpenAi,
+            ChatModel = ModelRegistry.Get(RequestModel.OpenAi),
             Options = new TurnOptions()
         };
 
@@ -992,11 +984,10 @@ public class HarnessTests
         {
             Session = session,
             ApiClient = new ApiClient(server.Client),
-            ChatCompletionsUri = server.ChatCompletionsUri,
             MaxIterations = 5,
             CancellationToken = CancellationToken.None,
             Toolkit = toolkit,
-            RequestModel = RequestModel.OpenAi,
+            ChatModel = ModelRegistry.Get(RequestModel.OpenAi),
             Options = new TurnOptions()
         };
 
@@ -1048,11 +1039,10 @@ public class HarnessTests
         {
             Session = session,
             ApiClient = new ApiClient(server.Client),
-            ChatCompletionsUri = server.ChatCompletionsUri,
             MaxIterations = 5,
             CancellationToken = CancellationToken.None,
             Toolkit = toolkit,
-            RequestModel = RequestModel.OpenAi,
+            ChatModel = ModelRegistry.Get(RequestModel.OpenAi),
             Options = new TurnOptions()
         };
 
