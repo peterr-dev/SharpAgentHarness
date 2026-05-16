@@ -1,4 +1,5 @@
 using Core.ChatCompletions;
+using Core.ChatCompletions.Models;
 using Json.Schema;
 using System.Text.Json;
 using System.Threading;
@@ -11,7 +12,6 @@ namespace Core
 
         public required ApiClient ApiClient { get; init; }
 
-        public required Uri ChatCompletionsUri { get; init; }
 
         public required CancellationToken CancellationToken { get; init; }
 
@@ -19,8 +19,13 @@ namespace Core
 
         public Toolkit? Toolkit { get; init; }
 
-        public required RequestModel RequestModel { get; init; }
+        public required IChatModel ChatModel { get; init; }
         public required TurnOptions Options { get; init; }
+
+        public Uri ChatCompletionsUri => ChatModel.ChatCompletionsUri;
+
+        public RequestModel RequestModel => ChatModel.Kind;
+
 
         public async Task<ChatCompletionMessage> RunTurnAsync(ChatCompletionMessageParam message)
         {
@@ -33,15 +38,15 @@ namespace Core
                 {
                     Session.Messages.Add(message);
 
-                    Request request = RequestFactory.Create(
-                        RequestModel,
-                        BuildRequestMessages(Session.Messages, turnStartIndex, RequestModel),
+                    Request request = ChatModel.CreateRequest(
+                        BuildRequestMessages(Session.Messages, turnStartIndex, ChatModel.IncludePriorTurnReasoning),
                         Toolkit?.Tools,
+                        Options.StructuredOutput,
                         Options);
 
                     HookRegistry.RunRequestReadyHooks(Session, request);
 
-                    Response response = await ApiClient.SendMessageAsync(Session, request, ChatCompletionsUri, CancellationToken);
+                    Response response = await ApiClient.SendMessageAsync(Session, request, ChatModel.ChatCompletionsUri, CancellationToken);
                     HookRegistry.RunResponseReceivedHooks(Session, response);
 
                     if (response is SuccessResponse success)
@@ -125,19 +130,19 @@ namespace Core
         }
 
         // Build the messages for the next request based on the Session; we clone messages as some need to be modified, specifically removing reasoning from prior turns
-        private static List<ChatCompletionMessageParam> BuildRequestMessages(List<ChatCompletionMessageParam> sourceMessages, int turnStartIndex, RequestModel requestModel)
+        private static List<ChatCompletionMessageParam> BuildRequestMessages(List<ChatCompletionMessageParam> sourceMessages, int turnStartIndex, bool includePriorTurnReasoning)
         {
             List<ChatCompletionMessageParam> messagesForNextRequest = new List<ChatCompletionMessageParam>(sourceMessages.Count);
 
             for (int index = 0; index < sourceMessages.Count; index++)
             {
-                messagesForNextRequest.Add(CloneMessageForRequest(sourceMessages[index], index, turnStartIndex, requestModel));
+                messagesForNextRequest.Add(CloneMessageForRequest(sourceMessages[index], index, turnStartIndex, includePriorTurnReasoning));
             }
 
             return messagesForNextRequest;
         }
 
-        private static ChatCompletionMessageParam CloneMessageForRequest(ChatCompletionMessageParam message, int index, int turnStartIndex, RequestModel requestModel)
+        private static ChatCompletionMessageParam CloneMessageForRequest(ChatCompletionMessageParam message, int index, int turnStartIndex, bool includePriorTurnReasoning)
         {
             return message switch
             {
@@ -154,19 +159,17 @@ namespace Core
                     ToolCallId = toolMessage.ToolCallId,
                     Content = toolMessage.Content
                 },
-                ChatCompletionAssistantMessageParam assistantMessage => CreateAssistantRequestMessage(assistantMessage, index, turnStartIndex, requestModel),
+                ChatCompletionAssistantMessageParam assistantMessage => CreateAssistantRequestMessage(assistantMessage, index, turnStartIndex, includePriorTurnReasoning),
                 _ => throw new InvalidOperationException($"Unsupported message type: {message.GetType().Name}")
             };
         }
 
-        private static ChatCompletionAssistantMessageParam CreateAssistantRequestMessage(ChatCompletionAssistantMessageParam assistantMessage, int index, int turnStartIndex, RequestModel requestModel)
+        private static ChatCompletionAssistantMessageParam CreateAssistantRequestMessage(ChatCompletionAssistantMessageParam assistantMessage, int index, int turnStartIndex, bool includePriorTurnReasoning)
         {
             List<ChatCompletionMessageToolCall>? toolCalls = assistantMessage.ToolCalls?.Select(CloneToolCall).ToList();
             List<ChatCompletionContentPart>? content = assistantMessage.Content?.ToList();
 
-            bool shouldIncludePriorTurnReasoning = requestModel == RequestModel.Qwen36;
-
-            if (index < turnStartIndex && !shouldIncludePriorTurnReasoning)
+            if (index < turnStartIndex && !includePriorTurnReasoning)
             {
                 // Omit reasoning from prior turns.
                 return new ChatCompletionAssistantMessageParam
