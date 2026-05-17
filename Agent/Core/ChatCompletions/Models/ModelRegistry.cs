@@ -18,39 +18,11 @@ namespace Core.ChatCompletions.Models
         }
     }
 
-    internal sealed class OpenAiModel : IChatModel
-    {
-        public RequestModel Kind => RequestModel.OpenAi;
-
-        public Uri ChatCompletionsUri => new("https://api.openai.com/v1/chat/completions");
-
-        public bool IncludePriorTurnReasoning => false;
-
-        public Request CreateRequest(
-            IReadOnlyList<ChatCompletionMessageParam> messages,
-            List<ChatCompletionTool>? tools,
-            StructuredOutputOptions? structuredOutput,
-            TurnOptions options)
-        {
-            return new OpenAiRequest
-            {
-                Model = options.OpenAi?.ModelName,
-                ReasoningEffort = options.OpenAi?.ReasoningEffort,
-                Verbosity = options.OpenAi?.Verbosity,
-                ServiceTier = options.OpenAi?.ServiceTier,
-                PromptCacheKey = options.OpenAi?.PromptCacheKey,
-                Messages = messages.ToList(),
-                Tools = tools ?? new List<ChatCompletionTool>(),
-                StructuredOutput = structuredOutput
-            };
-        }
-    }
-
     internal sealed class GptOssModel : IChatModel
     {
         public RequestModel Kind => RequestModel.GptOss;
 
-        public Uri ChatCompletionsUri => new("http://localhost:8080/chat/completions");
+        public Uri ChatCompletionsUri => new("http://localhost:8080/v1/chat/completions");
 
         public bool IncludePriorTurnReasoning => false;
 
@@ -75,7 +47,7 @@ namespace Core.ChatCompletions.Models
     {
         public RequestModel Kind => RequestModel.Qwen36;
 
-        public Uri ChatCompletionsUri => new("http://localhost:8080/chat/completions");
+        public Uri ChatCompletionsUri => new("http://localhost:8080/v1/chat/completions");
 
         public bool IncludePriorTurnReasoning => true;
 

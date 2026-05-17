@@ -1,3 +1,4 @@
+using Core.ChatCompletions.Models;
 using System.Text.Json;
 
 namespace Core.ChatCompletions
