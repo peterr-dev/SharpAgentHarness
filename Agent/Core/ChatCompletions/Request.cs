@@ -3,37 +3,11 @@ using System.Text.Json.Nodes;
 
 namespace Core.ChatCompletions
 {
-    public enum OpenAiReasoningEffort
-    {
-        None,
-        Minimal,
-        Low,
-        Medium,
-        High,
-        XHigh
-    }
-
     public enum GptOssReasoningEffort
     {
         Low,
         Medium,
         High
-    }
-
-    public enum Verbosity
-    {
-        Low,
-        Medium,
-        High
-    }
-
-    public enum ServiceTier
-    {
-        Auto,
-        Default,
-        Flex,
-        Scale,
-        Priority
     }
 
     public abstract class Request
@@ -136,25 +110,6 @@ namespace Core.ChatCompletions
                 ["type"] = "json_schema",
                 ["json_schema"] = jsonSchemaBody
             };
-        }
-    }
-
-    public sealed class OpenAiRequest : Request
-    {
-        public string? Model { get; set; }
-        public OpenAiReasoningEffort? ReasoningEffort { get; set; }
-        public Verbosity? Verbosity { get; set; }
-        public ServiceTier? ServiceTier { get; set; }
-        public string? PromptCacheKey { get; set; }
-
-        protected override void AddModelSpecificFields(JsonObject body)
-        {
-            if (!string.IsNullOrEmpty(Model)) body["model"] = Model;
-            if (!string.IsNullOrEmpty(PromptCacheKey)) body["prompt_cache_key"] = PromptCacheKey;
-            if (ReasoningEffort != null) body["reasoning_effort"] = ReasoningEffort.Value.ToString().ToLowerInvariant();
-            if (Verbosity != null) body["verbosity"] = Verbosity.Value.ToString().ToLowerInvariant();
-            if (ServiceTier != null) body["service_tier"] = ServiceTier.Value.ToString().ToLowerInvariant();
-
         }
     }
 
