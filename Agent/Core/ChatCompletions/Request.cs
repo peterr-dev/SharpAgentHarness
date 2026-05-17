@@ -113,19 +113,6 @@ namespace Core.ChatCompletions
         }
     }
 
-    public sealed class QwenRequest : Request
-    {
-        public required bool EnableThinking { get; set; }
-
-        protected override void AddModelSpecificFields(JsonObject body)
-        {
-            body["chat_template_kwargs"] = new JsonObject
-            {
-                ["enable_thinking"] = EnableThinking
-            };
-        }
-    }
-
     #region Messages
 
     public abstract class ChatCompletionMessageParam
